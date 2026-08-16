@@ -69,6 +69,11 @@ export default async function ClassDetailPage({
           </Link>
           {klass.teacher ? ` · ${klass.teacher.name}` : ''}
         </p>
+        {canManage && (
+          <Button asChild size="sm">
+            <Link href={`/app/classes/${id}/progress`}>View progress</Link>
+          </Button>
+        )}
       </header>
 
       <Card>

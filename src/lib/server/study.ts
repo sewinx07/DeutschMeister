@@ -14,12 +14,29 @@ import type {
   StudyPlan,
   StudySession,
   StudyState,
+  StudySummary,
   StudyTask,
   UserProfile,
   VocabularyWord,
 } from '@/types';
 
 export const SKILL_KEYS: SkillKey[] = ['vocabulary', 'grammar', 'reading', 'listening', 'writing', 'speaking'];
+
+/** Local-date day key (`YYYY-MM-DD`) — mirrors the catalog's day handling. */
+function localDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Whole days from `a` to `b` (day boundaries in local time). */
+function daysBetween(a: Date, b: Date): number {
+  const dayMs = 86400000;
+  const aStart = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const bStart = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((bStart - aStart) / dayMs);
+}
 
 /** Interactive transaction timeout — first-login imports rewrite many rows. */
 const SYNC_TIMEOUT_MS = 120_000;
@@ -805,5 +822,87 @@ export async function clearStudyState(orgId: string, userId: string): Promise<vo
     prisma.studyPlan.deleteMany({ where: { learnerId: learner.id } }),
     prisma.learnerSettings.deleteMany({ where: { learnerId: learner.id } }),
     prisma.learnerProfile.delete({ where: { id: learner.id } }),
+  ], { timeout: SYNC_TIMEOUT_MS });
+}
+
+/**
+ * Read-only summary of a learner's study state for (org, user). Returns null
+ * when the learner has no profile yet. Unlike `getStudyState` this never
+ * creates rows, so it is safe to use in teacher-facing read paths.
+ */
+export async function getStudySummary(orgId: string, userId: string): Promise<StudySummary | null> {
+  const learner = await prisma.learnerProfile.findUnique({
+    where: { orgId_userId: { orgId, userId } },
+  });
+  if (!learner) return null;
+
+  const [skills, tasks, sessions, vocabulary, mistakes, mocks, plan] = await Promise.all([
+    prisma.skillProgress.findMany({ where: { learnerId: learner.id } }),
+    prisma.studyTask.findMany({ where: { learnerId: learner.id } }),
+    prisma.studySessionRow.findMany({ where: { learnerId: learner.id } }),
+    prisma.vocabularyEntry.findMany({ where: { learnerId: learner.id } }),
+    prisma.mistakeRow.findMany({ where: { learnerId: learner.id } }),
+    prisma.mockExamResultRow.findMany({ where: { learnerId: learner.id } }),
+    prisma.studyPlan.findUnique({ where: { learnerId: learner.id } }),
   ]);
+
+  const skillRecord = emptySkills();
+  for (const s of skills) {
+    if (s.skill in skillRecord) skillRecord[s.skill as SkillKey] = toSkillState(s);
+  }
+
+  const weekAgo = new Date(Date.now() - 7 * 86400000);
+  const recent = sessions.filter((s) => s.startedAt >= weekAgo);
+
+  const activity: number[] = [];
+  for (const s of sessions) activity.push(s.startedAt.getTime());
+  for (const t of tasks) if (t.completedAt) activity.push(new Date(t.completedAt).getTime());
+  for (const m of mocks) activity.push(m.date.getTime());
+  const lastActiveAt = activity.length > 0 ? new Date(Math.max(...activity)).toISOString() : null;
+
+  const openMistakes = mistakes.filter((m) => !m.reviewed);
+  const recentMistakes = [...openMistakes]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5)
+    .map(toMistake);
+
+  const dueNow = new Date();
+  const dueCount = vocabulary.filter((w) => !w.mastered && w.dueAt <= dueNow).length;
+
+  const percents = mocks.map((m) => m.percent);
+  const mockAvgPercent = percents.length ? Math.round(percents.reduce((a, b) => a + b, 0) / percents.length) : null;
+  const mockBestPercent = percents.length ? Math.max(...percents) : null;
+
+  let currentPhase: string | null = null;
+  if (plan) {
+    const phases = plan.phases as unknown as StudyPlan['phases'];
+    const today = localDayKey(new Date());
+    currentPhase =
+      phases.find((p) => today >= localDayKey(new Date(p.start)) && today <= localDayKey(new Date(p.end)))?.name ??
+      null;
+  }
+
+  return {
+    onboarded: learner.onboarded,
+    skills: skillRecord,
+    tasksTotal: tasks.length,
+    tasksDone: tasks.filter((t) => t.status === 'done').length,
+    studyMinutesTotal: sessions.reduce((a, s) => a + s.durationMinutes, 0),
+    sessionsLast7d: recent.length,
+    minutesLast7d: recent.reduce((a, s) => a + s.durationMinutes, 0),
+    lastActiveAt,
+    vocabularyTotal: vocabulary.length,
+    vocabularyMastered: vocabulary.filter((w) => w.mastered).length,
+    vocabularyDue: dueCount,
+    mockExamsTaken: mocks.length,
+    mockAvgPercent,
+    mockBestPercent,
+    openMistakes: openMistakes.length,
+    recentMistakes,
+    currentLevel: learner.currentLevel,
+    targetLevel: learner.targetLevel,
+    examDate: learner.examDate,
+    daysUntilExam: learner.examDate ? daysBetween(new Date(), new Date(learner.examDate)) : null,
+    currentPhase,
+  };
 }

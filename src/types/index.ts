@@ -470,6 +470,34 @@ export type StudyState = Pick<
   | 'settings'
 >;
 
+/**
+ * Read-only summary of a learner's study state, used by the teacher progress
+ * view. Never includes private free-text data beyond recent mistakes.
+ */
+export interface StudySummary {
+  onboarded: boolean;
+  skills: Record<SkillKey, SkillState>;
+  tasksTotal: number;
+  tasksDone: number;
+  studyMinutesTotal: number;
+  sessionsLast7d: number;
+  minutesLast7d: number;
+  lastActiveAt: string | null;
+  vocabularyTotal: number;
+  vocabularyMastered: number;
+  vocabularyDue: number;
+  mockExamsTaken: number;
+  mockAvgPercent: number | null;
+  mockBestPercent: number | null;
+  openMistakes: number;
+  recentMistakes: Mistake[];
+  currentLevel: string;
+  targetLevel: string;
+  examDate: string | null;
+  daysUntilExam: number | null;
+  currentPhase: string | null;
+}
+
 export type AiProvider = 'openai' | 'anthropic';
 
 export interface CoachMessage {
