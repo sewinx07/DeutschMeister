@@ -112,7 +112,12 @@ export default async function CourseDetailPage({
                   className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{lesson.title}</p>
+                    <Link
+                      href={`/app/courses/${course.id}/lessons/${lesson.id}`}
+                      className="block truncate text-sm font-medium underline-offset-4 hover:underline"
+                    >
+                      {lesson.title}
+                    </Link>
                     <p className="text-xs text-muted-foreground">
                       {lesson.kind}
                       {lesson.minutes ? ` · ${lesson.minutes} min` : ''}
