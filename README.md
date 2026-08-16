@@ -2,7 +2,7 @@
 
 A personal command center for passing your German exam and landing an IT-Ausbildung in Germany. Adaptive study plans, spaced-repetition vocabulary, grammar drills, mock exams, an AI coach, and a full career toolkit — all in one app.
 
-> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres), Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons), Phase 5 (teacher progress dashboard — per-student study progress in every class), Phase 6 (lesson content authoring — edit, reorder and delete topics & lessons, including each lesson's JSON content) and Phase 7 (course lesson viewer — a dedicated page that renders a course lesson's authored content, with prev/next navigation through the course) are implemented and tested; the German exam app remains fully functional as the flagship demo.
+> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres), Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons), Phase 5 (teacher progress dashboard — per-student study progress in every class), Phase 6 (lesson content authoring — edit, reorder and delete topics & lessons, including each lesson's JSON content), Phase 7 (course lesson viewer — a dedicated page that renders a course lesson's authored content, with prev/next navigation through the course) and Phase 8 (student home dashboard — the org landing page showing today's plan tasks, vocabulary due, open mistakes, exam countdown and weekly activity) are implemented and tested; the German exam app remains fully functional as the flagship demo.
 
 ## Platform foundation (Phase 1)
 
@@ -61,6 +61,13 @@ A personal command center for passing your German exam and landing an IT-Ausbild
 - **Shared renderer** — `LessonContent` in `src/components/app/lesson-content.tsx` is directive-free so the same renderer powers the viewer page (server) and the authoring editor's live preview (client).
 - **Coverage** — integration tests in `tests/course-lesson-view.test.ts`: content/topic/sibling data, cross-topic navigation, cross-org denial, unpublished-course gate for non-managers, and missing lessons.
 
+## Student home dashboard (Phase 8)
+
+- **Org landing page** — `/app` no longer redirects to the course list. Learners land on a read-only dashboard: exam countdown, minutes studied this week, vocabulary due vs mastered, open mistakes, today's plan tasks (each linked to its lesson player) and recent mistakes.
+- **Role-aware empty state** — users without a learner profile see a welcome card: managers get quick links to courses and classes, learners get a path to the full study dashboard.
+- **Read-only loaders** — reuses `getStudySummary` and adds `loadTodayTasks` in `src/lib/server/study.ts` (today's tasks in stable order, empty when no profile, never creates rows).
+- **Coverage** — integration tests in `tests/home.test.ts`: today-filtering and stable ordering, no-profile → `[]` with zero rows created, and org scoping.
+
 ## Features
 
 - **Onboarding wizard** — set your current and target CEFR level, exam type and date, daily study time, and IT-Ausbildung goal.
@@ -108,7 +115,7 @@ Required env vars (see `.env.example`):
 ### Tests
 
 ```bash
-npm test                # RBAC, tenant-isolation, course/class & authoring, lesson-viewer, class-progress, plan & study engine tests
+npm test                # RBAC, tenant-isolation, course/class & authoring, lesson-viewer, class-progress, home dashboard, plan & study engine tests
 ```
 
 Integration tests run against `TEST_DATABASE_URL` (a dedicated Neon branch) and never touch the development database. Apply migrations to it once with `DATABASE_URL=<test-url> npm run db:deploy`.

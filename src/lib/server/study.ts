@@ -825,6 +825,19 @@ export async function clearStudyState(orgId: string, userId: string): Promise<vo
   ], { timeout: SYNC_TIMEOUT_MS });
 }
 
+/** Read-only today's plan tasks for (org, user). Empty when no learner profile. */
+export async function loadTodayTasks(orgId: string, userId: string): Promise<StudyTask[]> {
+  const learner = await prisma.learnerProfile.findUnique({
+    where: { orgId_userId: { orgId, userId } },
+  });
+  if (!learner) return [];
+  const rows = await prisma.studyTask.findMany({
+    where: { learnerId: learner.id, date: localDayKey(new Date()) },
+    orderBy: { id: 'asc' },
+  });
+  return rows.map(toTask);
+}
+
 /**
  * Read-only summary of a learner's study state for (org, user). Returns null
  * when the learner has no profile yet. Unlike `getStudyState` this never
