@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChevronLeft } from 'lucide-react';
 import { RosterPanel } from '@/components/app/roster-panel';
+import { ClassAssignmentsPanel } from '@/components/app/class-assignments-panel';
+import { loadClassAssignments, loadCourseLessonsForClass } from '@/lib/server/assignments';
 import { requireOrgContext } from '@/lib/server/org-context';
 import { roleHasPermission } from '@/lib/server/rbac';
 import { prisma } from '@/lib/server/db';
@@ -48,6 +50,11 @@ export default async function ClassDetailPage({
         include: { user: { select: { id: true, name: true, email: true } } },
         orderBy: { createdAt: 'asc' },
       });
+
+  const [assignments, courseLessons] = await Promise.all([
+    loadClassAssignments(ctx.org.id, klass.id, ctx.user.id),
+    canManage ? loadCourseLessonsForClass(ctx.org.id, klass.id) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -100,6 +107,13 @@ export default async function ClassDetailPage({
           />
         </CardContent>
       </Card>
+
+      <ClassAssignmentsPanel
+        classId={klass.id}
+        canManage={canManage}
+        assignments={assignments}
+        lessons={courseLessons}
+      />
     </div>
   );
 }

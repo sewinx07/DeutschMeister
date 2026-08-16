@@ -51,6 +51,8 @@ model User {
   coursesCreated    Course[]
   classesTaught     Class[]                @relation("ClassTeacher")
   enrollments       ClassEnrollment[]
+  assignedAssignments ClassAssignment[]   @relation("AssignmentAuthor")
+  assignmentSubmissions AssignmentSubmission[]
   learnerProfiles   LearnerProfile[]
 
   @@map("user")
@@ -238,6 +240,8 @@ model CourseLesson {
 
   topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
+  assignments ClassAssignment[]
+
   @@index([topicId, order])
   @@map("course_lesson")
 }
@@ -257,6 +261,7 @@ model Class {
   course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
   teacher     User?              @relation("ClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   enrollments ClassEnrollment[]
+  assignments ClassAssignment[]
 
   @@index([orgId])
   @@map("class")
@@ -274,6 +279,41 @@ model ClassEnrollment {
   @@unique([classId, studentId])
   @@index([studentId])
   @@map("class_enrollment")
+}
+
+/// A lesson assigned by a teacher to a whole class, with a due date.
+model ClassAssignment {
+  id           String   @id @default(cuid())
+  classId      String
+  lessonId     String
+  assignedById String?
+  dueAt        DateTime
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  class      Class                 @relation(fields: [classId], references: [id], onDelete: Cascade)
+  lesson     CourseLesson          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  assignedBy User?                 @relation("AssignmentAuthor", fields: [assignedById], references: [id], onDelete: SetNull)
+  submissions AssignmentSubmission[]
+
+  @@index([classId])
+  @@index([lessonId])
+  @@map("class_assignment")
+}
+
+/// One student's completion of an assignment.
+model AssignmentSubmission {
+  id           String   @id @default(cuid())
+  assignmentId String
+  studentId    String
+  completedAt  DateTime @default(now())
+
+  assignment ClassAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+  @@map("assignment_submission")
 }
 
 // ─── Study engine (Phase 3) ────────────────────────────────────────────────

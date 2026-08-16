@@ -38,6 +38,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               >
                 Classes
               </Link>
+              <Link
+                href="/app/assignments"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                Assignments
+              </Link>
               {canAnalyze && (
                 <Link
                   href="/app/analytics"

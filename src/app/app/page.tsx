@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { StatCard } from '@/components/shared/stats';
 import { CheckCircle2, Clock, Compass, Flame, ShieldAlert } from 'lucide-react';
 import { getStudySummary, loadTodayTasks } from '@/lib/server/study';
+import { loadAssignmentsForUser } from '@/lib/server/assignments';
 import { requireOrgContext } from '@/lib/server/org-context';
 import { roleHasPermission } from '@/lib/server/rbac';
 import { SKILL_LABELS } from '@/types';
@@ -14,12 +15,16 @@ export default async function AppHomePage() {
   const canManage =
     roleHasPermission(ctx.role, 'course.manage') || roleHasPermission(ctx.role, 'class.manage');
 
-  const [summary, todayTasks] = await Promise.all([
+  const [summary, todayTasks, assignments] = await Promise.all([
     getStudySummary(ctx.org.id, ctx.user.id),
     loadTodayTasks(ctx.org.id, ctx.user.id),
+    loadAssignmentsForUser(ctx.org.id, ctx.user.id, 'enrolled'),
   ]);
 
   const firstName = (ctx.user.name || 'there').split(' ')[0];
+  const openAssignments = assignments
+    .filter((a) => !a.submitted && !a.isOverdue)
+    .slice(0, 3);
 
   if (!summary) {
     return (
@@ -123,6 +128,45 @@ export default async function AppHomePage() {
           sub={summary.mockExamsTaken ? `Mock avg ${summary.mockAvgPercent}%` : 'No mock exams yet'}
         />
       </div>
+
+      {openAssignments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>Upcoming assignments</CardTitle>
+                <CardDescription>Homework from your classes</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/app/assignments">All assignments</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {openAssignments.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <Link
+                    href={`/app/courses/${a.courseId}/lessons/${a.lessonId}`}
+                    className="truncate text-sm font-medium underline-offset-2 hover:underline"
+                  >
+                    {a.lessonTitle}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    {a.className} · {a.dueLabel}
+                  </p>
+                </div>
+                <Button size="sm" asChild className="shrink-0">
+                  <Link href={`/app/courses/${a.courseId}/lessons/${a.lessonId}`}>Open lesson</Link>
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
