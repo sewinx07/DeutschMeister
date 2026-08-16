@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { SignOutButton } from '@/components/app/sign-out-button';
 import { requireOrgContext } from '@/lib/server/org-context';
-import { roleHasPermission } from '@/lib/server/rbac';
+import { canViewAnalytics, roleHasPermission } from '@/lib/server/rbac';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -9,14 +9,10 @@ export const metadata: Metadata = {
   description: 'Your learning workspace.',
 };
 
-const NAV = [
-  { href: '/app/courses', label: 'Courses' },
-  { href: '/app/classes', label: 'Classes' },
-];
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireOrgContext();
   const canManage = roleHasPermission(ctx.role, 'course.manage');
+  const canAnalyze = canViewAnalytics(ctx.role);
 
   return (
     <div className="min-h-svh bg-muted/30">
@@ -30,15 +26,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <span className="hidden sm:inline">{ctx.org.name}</span>
             </Link>
             <nav className="flex items-center gap-1">
-              {NAV.map((item) => (
+              <Link
+                href="/app/courses"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                Courses
+              </Link>
+              <Link
+                href="/app/classes"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                Classes
+              </Link>
+              {canAnalyze && (
                 <Link
-                  key={item.href}
-                  href={item.href}
+                  href="/app/analytics"
                   className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
-                  {item.label}
+                  Analytics
                 </Link>
-              ))}
+              )}
               <Link
                 href="/account"
                 className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"

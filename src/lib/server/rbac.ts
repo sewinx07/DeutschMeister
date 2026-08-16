@@ -113,3 +113,12 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
 export function canManageClass(role: Role, klassTeacherId: string | null, userId: string): boolean {
   return roleHasPermission(role, 'class.manage') || klassTeacherId === userId;
 }
+
+/**
+ * Analytics audience: staff who can both see analytics and access student
+ * data. Students and individual learners are excluded even though they hold
+ * `analytics.view`.
+ */
+export function canViewAnalytics(role: Role): boolean {
+  return roleHasPermission(role, 'analytics.view') && roleHasPermission(role, 'student.view');
+}
