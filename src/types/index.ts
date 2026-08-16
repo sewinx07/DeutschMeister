@@ -450,6 +450,26 @@ export interface Database {
   settings: AppSettings;
 }
 
+/**
+ * The user-owned slice of the database that is persisted server-side per
+ * (organization, user). Catalog content (grammar topics, comprehension items,
+ * prompts, mock exam templates) and career data stay client-side.
+ */
+export type StudyState = Pick<
+  Database,
+  | 'user'
+  | 'skills'
+  | 'vocabulary'
+  | 'plan'
+  | 'tasks'
+  | 'studySessions'
+  | 'mockResults'
+  | 'mistakes'
+  | 'achievements'
+  | 'speakingSessions'
+  | 'settings'
+>;
+
 export type AiProvider = 'openai' | 'anthropic';
 
 export interface CoachMessage {

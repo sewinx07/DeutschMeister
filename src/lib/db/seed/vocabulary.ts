@@ -1,5 +1,5 @@
 import type { VocabularyWord } from '@/types';
-import { addDays, uid } from '../storage';
+import { addDays } from '../storage';
 
 interface VocabSeed {
   german: string;
@@ -85,13 +85,27 @@ const words: VocabSeed[] = [
   { german: 'Zukunft', article: 'die', plural: '-', english: 'future', example: 'Meine Zukunft in Deutschland beginnt hier.', exampleEnglish: 'My future in Germany starts here.', category: 'Abstract', difficulty: 1 },
 ];
 
+/** Deterministic id per word so SRS progress is stable across devices. */
+function wordId(german: string): string {
+  const slug = german
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return `voc-${slug || 'word'}`;
+}
+
 export function buildVocabulary(): VocabularyWord[] {
   const now = new Date();
   return words.map((w, i) => {
     const familiarity = Math.min(0.9, 0.2 + (i % 5) * 0.08);
     const mastered = i % 9 === 0;
     return {
-      id: uid('voc'),
+      id: wordId(w.german),
       german: w.german,
       article: w.article,
       plural: w.plural,

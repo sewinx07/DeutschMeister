@@ -51,6 +51,7 @@ model User {
   coursesCreated    Course[]
   classesTaught     Class[]                @relation("ClassTeacher")
   enrollments       ClassEnrollment[]
+  learnerProfiles   LearnerProfile[]
 
   @@map("user")
 }
@@ -118,6 +119,7 @@ model Organization {
   auditLogs   AuditLog[]
   courses     Course[]
   classes     Class[]
+  learnerProfiles LearnerProfile[]
 
   @@map("organization")
 }
@@ -272,4 +274,250 @@ model ClassEnrollment {
   @@unique([classId, studentId])
   @@index([studentId])
   @@map("class_enrollment")
+}
+
+// ─── Study engine (Phase 3) ────────────────────────────────────────────────
+// Per-learner study state, scoped to (orgId, userId) and therefore tenant-
+// isolated. The client store keeps its existing interface and pushes/reads a
+// full `StudyState` slice; the catalog content (grammar topics, comprehension
+// items, prompts, mock exam templates) stays deterministic client-side.
+
+/// One learner's profile inside one organization (the demo shell's UserProfile).
+model LearnerProfile {
+  id                String   @id @default(cuid())
+  orgId             String
+  userId            String
+  currentLevel      String
+  targetLevel       String
+  examType          String
+  examDate          String?
+  dailyStudyMinutes Int      @default(30)
+  strengths         Json?
+  weaknesses        Json?
+  targetAusbildung  String?
+  itField           String?
+  preferredRegions  Json?
+  onboarded         Boolean  @default(false)
+  timezone          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  org              Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabulary       VocabularyEntry[]
+  skills           SkillProgress[]
+  plan             StudyPlan?
+  tasks            StudyTask[]
+  sessions         StudySessionRow[]
+  mockResults      MockExamResultRow[]
+  mistakes         MistakeRow[]
+  achievements     AchievementRow[]
+  speakingSessions SpeakingSessionRow[]
+  settings         LearnerSettings?
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("learner_profile")
+}
+
+/// A learner's vocabulary entry (SRS state + word snapshot). Keyed by `german`
+/// so progress stays consistent across devices even when local word ids differ.
+model VocabularyEntry {
+  id              String    @id @default(cuid())
+  learnerId       String
+  wordId          String
+  german          String
+  article         String
+  plural          String?
+  english         String
+  ipa             String?
+  example         String
+  exampleEnglish  String?
+  category        String
+  difficulty      Int       @default(1)
+  familiarity     Float     @default(0)
+  ease            Float     @default(2.5)
+  interval        Int       @default(0)
+  reviews         Int       @default(0)
+  dueAt           DateTime
+  lastReviewedAt  DateTime?
+  createdAt       DateTime
+  mastered        Boolean   @default(false)
+  updatedAt       DateTime  @updatedAt
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@unique([learnerId, german])
+  @@index([learnerId, dueAt])
+  @@map("vocabulary_entry")
+}
+
+/// Per-skill progress totals used by the engine (scores, minutes, lessons).
+model SkillProgress {
+  id               String    @id @default(cuid())
+  learnerId        String
+  skill            String
+  score            Int       @default(0)
+  previousScore    Int       @default(0)
+  lessonsCompleted Int       @default(0)
+  practiceMinutes  Int       @default(0)
+  lastPracticedAt  DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@unique([learnerId, skill])
+  @@map("skill_progress")
+}
+
+/// The adaptive study plan. `phases` and `adjustments` are stored as JSON.
+model StudyPlan {
+  id             String   @id @default(cuid())
+  learnerId      String   @unique
+  generatedAt    DateTime
+  lastAdaptedAt  DateTime
+  examDate       String
+  phases         Json
+  adjustments    Json
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@map("study_plan")
+}
+
+/// A single day's study task from the plan.
+model StudyTask {
+  id            String  @id
+  learnerId     String
+  date          String
+  skill         String
+  title         String
+  description   String?
+  durationMinutes Int
+  difficulty    Int
+  status        String
+  type          String
+  sourceId      String?
+  phaseId       String?
+  completedAt   String?
+  isRest        Boolean @default(false)
+  isPlaceholder Boolean @default(false)
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@index([learnerId, date])
+  @@map("study_task")
+}
+
+/// A completed practice session.
+model StudySessionRow {
+  id              String  @id
+  learnerId       String
+  taskId          String?
+  skill           String
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationMinutes Int
+  source          String?
+  score           Int?
+  completed       Boolean @default(true)
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@index([learnerId])
+  @@map("study_session")
+}
+
+/// A submitted mock exam result. Snapshot arrays are stored as JSON.
+model MockExamResultRow {
+  id              String    @id
+  learnerId       String
+  templateId      String
+  name            String
+  level           String
+  date            DateTime
+  durationMinutes Int
+  sectionScores   Json
+  totalScore      Int
+  totalMaxScore   Int
+  percent         Float
+  answers         Json
+  mistakes        Json
+  weakTopics      Json
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@index([learnerId])
+  @@map("mock_exam_result")
+}
+
+/// Mistake bank entry (spelling, articles, verbs, cases, word order, skills…).
+model MistakeRow {
+  id           String   @id
+  learnerId    String
+  category     String
+  subcategory  String?
+  original     String
+  correct      String
+  reason       String
+  relatedTopic String?
+  createdAt    DateTime
+  reviewDate   String
+  reviewed     Boolean  @default(false)
+  timesCorrect Int      @default(0)
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@index([learnerId])
+  @@map("mistake")
+}
+
+/// Gamification achievement progress for a learner.
+model AchievementRow {
+  id          String  @id @default(cuid())
+  learnerId   String
+  key         String
+  title       String
+  description String
+  icon        String
+  unlockedAt  String?
+  progress    Float   @default(0)
+  target      Float   @default(0)
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@unique([learnerId, key])
+  @@map("achievement")
+}
+
+/// A recorded speaking practice session. Audio recordings stay device-local.
+model SpeakingSessionRow {
+  id              String   @id
+  learnerId       String
+  promptId        String
+  level           String
+  date            DateTime
+  answers         Json
+  feedback        Json
+  durationMinutes Int
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@index([learnerId])
+  @@map("speaking_session")
+}
+
+/// Learner preferences (theme, sound, exam mode, rest-day cadence…).
+model LearnerSettings {
+  id             String  @id @default(cuid())
+  learnerId      String  @unique
+  theme          String  @default("system")
+  sound          Boolean @default(true)
+  examMode       Boolean @default(false)
+  restDayEvery   Int     @default(7)
+  notifications  Boolean @default(true)
+
+  learner LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  @@map("learner_settings")
 }

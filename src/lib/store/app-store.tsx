@@ -1,7 +1,7 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import type {
   Database,
   JobApplication,
@@ -10,6 +10,7 @@ import type {
   Project,
   SkillKey,
   SpeakingSession,
+  StudyState,
   StudyTask,
   TechnicalSkill,
   UserProfile,
@@ -20,6 +21,13 @@ import { applySrsReview, ReviewRating } from '../engine/srs';
 import { generatePlan } from '../engine/plan';
 import { adaptPlan } from '../engine/adapt';
 import { evaluateAchievements } from '../engine/gamify';
+import { authClient } from '@/lib/auth/client';
+import {
+  loadStudyState,
+  saveStudyState,
+  clearStudyStateServer,
+  updateStudyProfileName,
+} from '@/lib/server/actions/study';
 
 interface AppStore {
   db: Database | null;
@@ -65,40 +73,135 @@ function skillDeltaForTask(type: StudyTask['type']): number {
   }
 }
 
+/** The slice of the database that is persisted server-side per (org, user). */
+function studySlice(db: Database): StudyState {
+  return {
+    user: db.user,
+    skills: db.skills,
+    vocabulary: db.vocabulary,
+    plan: db.plan,
+    tasks: db.tasks,
+    studySessions: db.studySessions,
+    mockResults: db.mockResults,
+    mistakes: db.mistakes,
+    achievements: db.achievements,
+    speakingSessions: db.speakingSessions,
+    settings: db.settings,
+  };
+}
+
+function parseLocalDB(raw: string | null): Database | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Database;
+  } catch {
+    return null;
+  }
+}
+
+/** Combine server-persisted study state with the deterministic catalog and device-local career data. */
+function mergeStudyState(study: StudyState, local: Database | null): Database {
+  const base = createInitialDatabase();
+  return {
+    ...base,
+    ...study,
+    version: DB_VERSION,
+    createdAt: study.user?.createdAt ?? base.createdAt,
+    goal: local?.goal ?? base.goal,
+    techSkills: local?.techSkills ?? base.techSkills,
+    projects: local?.projects ?? base.projects,
+    applications: local?.applications ?? base.applications,
+    documents: local?.documents ?? base.documents,
+  };
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<Database | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
+  const authed = Boolean(session?.user);
+  const userId = session?.user?.id ?? null;
+  const syncQueue = useRef(Promise.resolve());
 
-  const persist = useCallback((next: Database) => {
-    const evaluated = evaluateAchievements(next);
-    setDb(evaluated);
-    saveDB(JSON.stringify(evaluated));
+  const pushSync = useCallback((state: StudyState) => {
+    syncQueue.current = syncQueue.current
+      .then(async () => {
+        await saveStudyState(state);
+      })
+      .catch(() => {
+        /* offline/lost sync is acceptable — the local backup is always kept */
+      });
   }, []);
+
+  const persist = useCallback(
+    (next: Database) => {
+      const evaluated = evaluateAchievements(next);
+      setDb(evaluated);
+      saveDB(JSON.stringify(evaluated));
+      if (authed) {
+        pushSync(studySlice(evaluated));
+      }
+    },
+    [authed, pushSync]
+  );
 
   useEffect(() => {
-    const raw = loadDB();
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as Database;
-        if (parsed.version !== DB_VERSION) {
-          const fresh = createInitialDatabase();
-          if (parsed.user) fresh.user = parsed.user;
-          if (parsed.skills) fresh.skills = { ...fresh.skills, ...parsed.skills };
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time localStorage migration
-          persist(fresh);
+    if (sessionPending) return;
+
+    let cancelled = false;
+    (async () => {
+      const local = parseLocalDB(loadDB());
+      if (!authed || !userId) {
+        if (local && local.version === DB_VERSION) {
+          if (!cancelled) setDb(local);
           return;
         }
-        setDb(parsed);
+        const fresh = createInitialDatabase();
+        if (!cancelled) setDb(fresh);
+        saveDB(JSON.stringify(fresh));
         return;
-      } catch {
-        /* fall through to fresh */
       }
-    }
-    const fresh = createInitialDatabase();
-    setDb(fresh);
-    saveDB(JSON.stringify(fresh));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+      const res = await loadStudyState();
+      if (cancelled) return;
+      if (!res.ok) {
+        // No org access (or transient failure): fall back to the local backup.
+        if (local && local.version === DB_VERSION) {
+          setDb(local);
+        } else {
+          setDb(createInitialDatabase());
+        }
+        return;
+      }
+      const study = res.data;
+
+      // First login with existing local progress: migrate the local study slice
+      // to the server so no progress is lost across devices.
+      if (!study.user?.onboarded && local?.user?.onboarded) {
+        const imported = studySlice(local);
+        try {
+          const saved = await saveStudyState(imported);
+          if (saved.ok) {
+            const merged = mergeStudyState(imported, local);
+            setDb(merged);
+            saveDB(JSON.stringify(merged));
+            return;
+          }
+        } catch {
+          /* fall through to server state */
+        }
+      }
+
+      const merged = mergeStudyState(study, local);
+      setDb(merged);
+      saveDB(JSON.stringify(merged));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionPending, authed, userId, pathname]);
 
   useEffect(() => {
     if (!db || !db.user || !db.user.onboarded) {
@@ -115,9 +218,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateUser = useCallback(
     (partial: Partial<UserProfile>) => {
       if (!db) return;
+      if (authed && partial.name && partial.name !== db.user?.name) {
+        void updateStudyProfileName(partial.name);
+      }
       persist({ ...db, user: db.user ? { ...db.user, ...partial } : partial as UserProfile });
     },
-    [db, persist]
+    [db, authed, persist]
   );
 
   const completeOnboarding = useCallback(
@@ -438,9 +544,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const resetAll = useCallback(() => {
     const fresh = createInitialDatabase();
+    if (authed) {
+      void clearStudyStateServer();
+    }
     persist(fresh);
     router.push('/');
-  }, [persist, router]);
+  }, [authed, persist, router]);
 
   const value = useMemo<AppStore>(
     () => ({

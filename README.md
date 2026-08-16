@@ -2,7 +2,7 @@
 
 A personal command center for passing your German exam and landing an IT-Ausbildung in Germany. Adaptive study plans, spaced-repetition vocabulary, grammar drills, mock exams, an AI coach, and a full career toolkit — all in one app.
 
-> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log) and Phase 2 (courses, classes and the student/teacher UI) are implemented and tested; the German exam app remains fully functional as the flagship demo.
+> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI) and Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres) are implemented and tested; the German exam app remains fully functional as the flagship demo.
 
 ## Platform foundation (Phase 1)
 
@@ -19,6 +19,14 @@ A personal command center for passing your German exam and landing an IT-Ausbild
 - **Classes & rosters** — a class ties a course to a teacher and enrolled students. Owners/admins manage any class; a teacher manages their **own** class's roster (rule in `src/lib/server/rbac.ts`); students see only the classes they are enrolled in.
 - **UI** — authenticated area at `/app` (`/app/courses`, `/app/courses/[id]`, `/app/classes`, `/app/classes/[id]`), protected by the proxy. Server actions live in `src/lib/server/actions/{courses,classes}.ts` and are validated with Zod + audited.
 - **Tenant isolation** — courses/classes/enrollments are scoped by org id server-side and covered by integration tests in `tests/courses.test.ts`.
+
+## Study engine persistence (Phase 3)
+
+- **What's persisted** — for every signed-in learner, per organization, the full study slice now lives in Postgres: profile (levels, exam date, goal), the six-skill progress, spaced-repetition vocabulary (with SRS fields: familiarity, ease, interval, due date, mastery), the adaptive study plan + generated tasks, study sessions, mock exam results, the mistake bank, achievements, speaking sessions, and app settings. Catalog content (grammar/comprehension/prompts/mock templates) stays deterministic client-side; career data (goal, tech skills, projects, applications, documents) stays on-device in `localStorage`.
+- **Storage layout** — a `LearnerProfile` row per `(organization, user)`; vocabulary is keyed by `german` (`@@unique(learnerId, german)`), tasks/sessions/mistakes by id, so progress follows the learner across devices. All rows cascade-delete with the profile.
+- **Service** — `src/lib/server/study.ts` (`getStudyState`, `syncStudyState`, `clearStudyState`) loads and writes the whole slice in one transactional pass, skipping rows whose canonical JSON is unchanged (fast steady-state syncs, safe first-login imports). Server actions in `src/lib/server/actions/study.ts` validate payloads with Zod and resolve the org server-side.
+- **Client wiring** — `src/lib/store/app-store.tsx`: authenticated users load from the server and merge with catalog + local career data; a first login with existing local progress imports it to the server (no progress lost); saves are queued and pushed to the server while a `localStorage` backup is always kept. Anonymous users keep working fully offline as before.
+- **Coverage** — integration tests in `tests/study.test.ts`: round-trip fidelity, idempotent syncs, tenant isolation, and full reset.
 
 ## Features
 
@@ -80,7 +88,7 @@ Set either `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in your environment. Withou
 
 The **demo app** stores its data in the browser's `localStorage` under the key `germain:db:v1` — your data never leaves your device, but it is tied to one browser.
 
-Accounts, organizations and memberships live in the **Lernio database** (Postgres). So far it stores authentication, org membership, roles, invitations, the audit log, and the Phase 2 courses/classes/enrollments; per-lesson study data is still client-side until the persistence layer lands in a later phase.
+Accounts, organizations and memberships live in the **Lernio database** (Postgres). So far it stores authentication, org membership, roles, invitations, the audit log, courses/classes/enrollments, and — since Phase 3 — each learner's study state (vocabulary, plan, progress, mistakes, mock results, achievements, settings).
 
 ## Deploy
 
@@ -91,7 +99,7 @@ npm run build
 npm start
 ```
 
-On Vercel, import the repo and it builds with zero configuration. There is no database to provision.
+Set `DATABASE_URL` (a Neon/Postgres connection string), run `npx prisma migrate deploy` and `npm run db:seed`, then build and start. On Vercel, import the repo, set `DATABASE_URL` as an environment variable and it builds with zero configuration.
 
 ## Project structure
 

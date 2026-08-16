@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import { PrismaNeon } from '@prisma/adapter-neon';
-import { PrismaClient } from '../src/generated/prisma/client';
+import { PrismaClient, Prisma } from '../src/generated/prisma/client';
 import { MembershipStatus, Role } from '../src/generated/prisma/enums';
 import { hashPassword } from '@better-auth/utils/password';
+import { buildVocabulary } from '../src/lib/db/seed/vocabulary';
+import { createEmptySkills } from '../src/lib/db/database';
+import { generatePlan } from '../src/lib/engine/plan';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -152,6 +155,149 @@ async function main() {
   console.log('  German A1 · Foundations (published, 2 topics, 5 lessons)');
   console.log('  English B1 · Communication Skills (published, 1 topic, 2 lessons)');
   console.log(`  Class "German A1 · Morning group" — teacher: ${teacher.name}, students: Anna, Luca`);
+
+  console.log('Seeding demo learner state…');
+
+  const PROFILES: Record<string, { level: string; target: string; examType: string; daily: number }> = {
+    'admin@lernio.app': { level: 'B2', target: 'C1', examType: 'Goethe-Zertifikat', daily: 30 },
+    'owner@lernio.app': { level: 'B1', target: 'C1', examType: 'Goethe-Zertifikat', daily: 45 },
+    'teacher@lernio.app': { level: 'B2', target: 'C1', examType: 'telc Deutsch', daily: 30 },
+    'anna@lernio.app': { level: 'A1', target: 'B1', examType: 'Goethe-Zertifikat', daily: 30 },
+    'luca@lernio.app': { level: 'A1', target: 'B1', examType: 'Goethe-Zertifikat', daily: 20 },
+  };
+
+  const now = new Date();
+  const examDate = new Date(now.getTime() + 90 * 86400000).toISOString();
+
+  for (const person of PEOPLE) {
+    const user = await byEmail(person.email);
+    const p = PROFILES[person.email];
+    await prisma.learnerProfile.upsert({
+      where: { orgId_userId: { orgId: org.id, userId: user.id } },
+      update: {},
+      create: {
+        orgId: org.id,
+        userId: user.id,
+        currentLevel: p.level,
+        targetLevel: p.target,
+        examType: p.examType,
+        examDate,
+        dailyStudyMinutes: p.daily,
+        onboarded: true,
+      },
+    });
+    const learner = await prisma.learnerProfile.findUniqueOrThrow({
+      where: { orgId_userId: { orgId: org.id, userId: user.id } },
+    });
+    await prisma.learnerSettings.upsert({
+      where: { learnerId: learner.id },
+      update: {},
+      create: { learnerId: learner.id },
+    });
+    console.log(`  profile: ${person.email}`);
+  }
+
+  // Anna gets a full starter state: vocabulary, baseline skills and a study plan.
+  const annaProfile = await prisma.learnerProfile.findUniqueOrThrow({
+    where: { orgId_userId: { orgId: org.id, userId: anna.id } },
+  });
+
+  const vocabulary = buildVocabulary();
+  await prisma.vocabularyEntry.createMany({
+    data: vocabulary.map((w) => ({
+      learnerId: annaProfile.id,
+      wordId: w.id,
+      german: w.german,
+      article: w.article,
+      plural: w.plural ?? null,
+      english: w.english,
+      ipa: w.ipa ?? null,
+      example: w.example,
+      exampleEnglish: w.exampleEnglish ?? null,
+      category: w.category,
+      difficulty: w.difficulty,
+      familiarity: w.familiarity,
+      ease: w.ease,
+      interval: w.interval,
+      reviews: w.reviews,
+      dueAt: new Date(w.dueAt),
+      lastReviewedAt: w.lastReviewedAt ? new Date(w.lastReviewedAt) : null,
+      createdAt: new Date(w.createdAt),
+      mastered: w.mastered,
+    })),
+    skipDuplicates: true,
+  });
+
+  await prisma.skillProgress.createMany({
+    data: ['vocabulary', 'grammar', 'reading', 'listening', 'writing', 'speaking'].map((skill, i) => ({
+      learnerId: annaProfile.id,
+      skill,
+      score: 20 + i * 5,
+      practiceMinutes: 45 + i * 15,
+    })),
+    skipDuplicates: true,
+  });
+
+  const existingPlan = await prisma.studyPlan.findUnique({ where: { learnerId: annaProfile.id } });
+  if (!existingPlan) {
+    const skills = createEmptySkills();
+    for (const row of await prisma.skillProgress.findMany({ where: { learnerId: annaProfile.id } })) {
+      if (row.skill in skills) skills[row.skill as keyof typeof skills] = { ...skills[row.skill as keyof typeof skills], score: row.score, practiceMinutes: row.practiceMinutes };
+    }
+    const { plan, tasks } = generatePlan(
+      {
+        id: anna.id,
+        name: anna.name,
+        email: anna.email,
+        createdAt: anna.createdAt.toISOString(),
+        currentLevel: 'A1',
+        targetLevel: 'B1',
+        examType: 'Goethe-Zertifikat',
+        examDate,
+        dailyStudyMinutes: 30,
+        strengths: [],
+        weaknesses: [],
+        targetAusbildung: 'Fachinformatiker',
+        itField: 'Anwendungsentwicklung',
+        preferredRegions: [],
+        onboarded: true,
+      },
+      skills,
+      []
+    );
+    await prisma.studyPlan.create({
+      data: {
+        learnerId: annaProfile.id,
+        generatedAt: new Date(plan.generatedAt),
+        lastAdaptedAt: new Date(plan.lastAdaptedAt),
+        examDate: plan.examDate,
+        phases: plan.phases as unknown as Prisma.InputJsonValue,
+        adjustments: plan.adjustments as unknown as Prisma.InputJsonValue,
+      },
+    });
+    await prisma.studyTask.createMany({
+      data: tasks.map((t) => ({
+        id: t.id,
+        learnerId: annaProfile.id,
+        date: t.date,
+        skill: t.skill,
+        title: t.title,
+        description: t.description ?? null,
+        durationMinutes: t.durationMinutes,
+        difficulty: t.difficulty,
+        status: t.status,
+        type: t.type,
+        sourceId: t.sourceId ?? null,
+        phaseId: t.phaseId ?? null,
+        completedAt: t.completedAt ?? null,
+        isRest: t.isRest ?? false,
+        isPlaceholder: t.isPlaceholder ?? false,
+      })),
+    });
+    console.log(`  anna: ${vocabulary.length} vocabulary entries, plan + ${tasks.length} tasks`);
+  } else {
+    console.log(`  anna: study state already present (${await prisma.vocabularyEntry.count({ where: { learnerId: annaProfile.id } })} words)`);
+  }
 
   console.log('Seed complete.');
   console.log(`Demo password for every account above: ${DEMO_PASSWORD}`);
