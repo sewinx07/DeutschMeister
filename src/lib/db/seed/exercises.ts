@@ -1,8 +1,8 @@
 import type { ComprehensionItem, SpeakingPrompt, WritingPrompt } from '@/types';
-import { uid } from '../storage';
+import { slugify, uid } from '../storage';
 
 export function buildListening(): ComprehensionItem[] {
-  return [
+  const items: ComprehensionItem[] = [
     {
       id: uid('ls'),
       kind: 'listening',
@@ -89,10 +89,11 @@ export function buildListening(): ComprehensionItem[] {
       durationMinutes: 4,
     },
   ];
+  return items.map((item) => ({ ...item, id: `listen-${slugify(item.title)}` }));
 }
 
 export function buildReading(): ComprehensionItem[] {
-  return [
+  const items: ComprehensionItem[] = [
     {
       id: uid('rd'),
       kind: 'reading',
@@ -178,10 +179,11 @@ export function buildReading(): ComprehensionItem[] {
       durationMinutes: 7,
     },
   ];
+  return items.map((item) => ({ ...item, id: `read-${slugify(item.title)}` }));
 }
 
 export function buildWritingPrompts(): WritingPrompt[] {
-  return [
+  const items: WritingPrompt[] = [
     {
       id: uid('wp'),
       level: 'A2',
@@ -249,10 +251,11 @@ export function buildWritingPrompts(): WritingPrompt[] {
       skillFocus: ['vocabulary', 'grammar'],
     },
   ];
+  return items.map((item) => ({ ...item, id: `write-${slugify(item.title)}` }));
 }
 
 export function buildSpeakingPrompts(): SpeakingPrompt[] {
-  return [
+  const items: SpeakingPrompt[] = [
     {
       id: uid('sp'),
       level: 'A2',
@@ -339,4 +342,5 @@ export function buildSpeakingPrompts(): SpeakingPrompt[] {
       durationMinutes: 6,
     },
   ];
+  return items.map((item) => ({ ...item, id: `speak-${slugify(item.title)}` }));
 }

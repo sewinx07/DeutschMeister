@@ -208,7 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!db.plan || db.tasks.length === 0) {
-      const { plan, tasks } = generatePlan(db.user, db.skills, db.mockResults);
+      const { plan, tasks } = generatePlan(db.user, db.skills, db.mockResults, db);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time plan bootstrap after hydration
       persist({ ...db, plan, tasks });
     }
@@ -238,7 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           previousScore: score,
         };
       });
-      const { plan, tasks } = generatePlan(profile, skills, db.mockResults);
+      const { plan, tasks } = generatePlan(profile, skills, db.mockResults, db);
       persist({ ...db, user: profile, skills, plan, tasks });
     },
     [db, persist]
@@ -453,7 +453,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const generateStudyPlan = useCallback(() => {
     if (!db || !db.user) return;
-    const { plan, tasks } = generatePlan(db.user, db.skills, db.mockResults);
+    const { plan, tasks } = generatePlan(db.user, db.skills, db.mockResults, db);
     persist({ ...db, plan, tasks });
   }, [db, persist]);
 

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function PlanPage() {
-  const { db, completeTask, startTask, skipTask, generateStudyPlan, adaptStudyPlan } = useApp();
+  const { db, completeTask, skipTask, generateStudyPlan, adaptStudyPlan } = useApp();
   const [weeksAhead, setWeeksAhead] = useState(0);
 
   const data = useMemo(() => {
@@ -222,8 +222,10 @@ export default function PlanPage() {
                         <Badge variant="secondary">Done</Badge>
                       ) : (
                         <>
-                          <Button size="sm" variant={task.status === 'in_progress' ? 'default' : 'outline'} onClick={() => startTask(task.id)}>
-                            {task.status === 'in_progress' ? 'In progress' : 'Start'}
+                          <Button size="sm" asChild variant={task.status === 'in_progress' ? 'default' : 'outline'}>
+                            <Link href={`/lessons/${task.id}`}>
+                              {task.status === 'in_progress' ? 'Continue' : 'Start'}
+                            </Link>
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => completeTask(task.id)}>
                             Complete

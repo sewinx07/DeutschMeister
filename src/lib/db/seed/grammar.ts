@@ -1,5 +1,5 @@
 import type { GrammarTopic } from '@/types';
-import { uid } from '../storage';
+import { slugify } from '../storage';
 
 interface GrammarSeed {
   title: string;
@@ -298,14 +298,14 @@ const topics: GrammarSeed[] = [
 
 export function buildGrammar(): GrammarTopic[] {
   return topics.map((t) => ({
-    id: uid('gr'),
+    id: `gram-${slugify(t.title)}`,
     title: t.title,
     level: t.level,
     category: t.category,
     explanation: t.explanation,
     examples: t.examples,
-    exercises: t.exercises.map((e) => ({
-      id: uid('gx'),
+    exercises: t.exercises.map((e, i) => ({
+      id: `gx-${slugify(t.title)}-${i}`,
       prompt: e.prompt,
       options: e.options,
       answer: e.answer,

@@ -58,6 +58,19 @@ export function uid(prefix = 'id'): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** URL-safe slug from an arbitrary string, stable across calls. */
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
 export function isoDate(d = new Date()): string {
   return d.toISOString();
 }

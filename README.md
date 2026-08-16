@@ -2,7 +2,7 @@
 
 A personal command center for passing your German exam and landing an IT-Ausbildung in Germany. Adaptive study plans, spaced-repetition vocabulary, grammar drills, mock exams, an AI coach, and a full career toolkit — all in one app.
 
-> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI) and Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres) are implemented and tested; the German exam app remains fully functional as the flagship demo.
+> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres) and Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons) are implemented and tested; the German exam app remains fully functional as the flagship demo.
 
 ## Platform foundation (Phase 1)
 
@@ -27,6 +27,15 @@ A personal command center for passing your German exam and landing an IT-Ausbild
 - **Service** — `src/lib/server/study.ts` (`getStudyState`, `syncStudyState`, `clearStudyState`) loads and writes the whole slice in one transactional pass, skipping rows whose canonical JSON is unchanged (fast steady-state syncs, safe first-login imports). Server actions in `src/lib/server/actions/study.ts` validate payloads with Zod and resolve the org server-side.
 - **Client wiring** — `src/lib/store/app-store.tsx`: authenticated users load from the server and merge with catalog + local career data; a first login with existing local progress imports it to the server (no progress lost); saves are queued and pushed to the server while a `localStorage` backup is always kept. Anonymous users keep working fully offline as before.
 - **Coverage** — integration tests in `tests/study.test.ts`: round-trip fidelity, idempotent syncs, tenant isolation, and full reset.
+
+## Lesson player (Phase 4)
+
+- **Plan → lesson**: every content task on the plan page opens a real lesson at `/lessons/[taskId]` via its **Start** button instead of a bare "complete". Grammar, reading, listening, writing, speaking, mock exams, vocabulary/review, mistakes and rest days each get a purpose-built player.
+- **Deterministic content ids** — catalog content now has stable, slug-based ids (`gram-…`, `gx-…`, `listen-…`, `read-…`, `write-…`, `speak-…`, `mock-…`) so generated tasks can reference a concrete grammar topic, comprehension item, prompt or mock template.
+- **Task → content linking** — `generatePlan`/`generateTasksForDay` accept the catalog and stamp every content-backed task with a `sourceId` via a deterministic picker, so regenerations and weekly adaptations keep mapping to the same content. Tasks created before this change fall back to a type-based pick (still fully playable).
+- **Progress written on the fly** — finishing a lesson calls `completeTask` (task done, skill delta, study session), and the grammar/writing/speaking players also push mistakes into the mistake bank for later review. Mock exams keep scoring through the existing runner.
+- **Shared components** — the grammar exercises moved into a reusable `GrammarDetail` component (scoring + mistake capture) shared by the grammar page and the player; the existing `ComprehensionExercise` is reused for reading/listening.
+- **Coverage** — unit tests in `tests/plan.test.ts`: content tasks resolve to real catalog ids, mock exam tasks reference real templates, regenerations are deterministic, and absent catalogs leave `sourceId` unset.
 
 ## Features
 
@@ -75,7 +84,7 @@ Required env vars (see `.env.example`):
 ### Tests
 
 ```bash
-npm test                # RBAC, tenant-isolation, course & class isolation tests
+npm test                # RBAC, tenant-isolation, course/class isolation, plan & study engine tests
 ```
 
 Integration tests run against `TEST_DATABASE_URL` (a dedicated Neon branch) and never touch the development database. Apply migrations to it once with `DATABASE_URL=<test-url> npm run db:deploy`.

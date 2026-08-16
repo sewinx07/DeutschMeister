@@ -1,5 +1,6 @@
 import type {
   CefrLevel,
+  Database,
   Difficulty,
   MockExamResult,
   SkillKey,
@@ -146,7 +147,35 @@ const ASSESSMENT_TASKS: TaskSpec[] = [
 ];
 
 function pick<T>(arr: T[], seed: number): T {
-  return arr[seed % arr.length];
+  return arr[((seed % arr.length) + arr.length) % arr.length];
+}
+
+/** Deterministic content id for a task, so a lesson can be opened from the plan. */
+function pickSourceId<T extends { id: string }>(items: T[] | undefined, seed: number): string | undefined {
+  if (!items || items.length === 0) return undefined;
+  return pick(items, seed).id;
+}
+
+function contentSourceFor(
+  spec: TaskSpec,
+  catalog: Database | null | undefined,
+  seed: number
+): string | undefined {
+  if (!catalog) return undefined;
+  switch (spec.type) {
+    case 'grammar':
+      return pickSourceId(catalog.grammar, seed);
+    case 'reading':
+      return pickSourceId(catalog.exercises.reading, seed);
+    case 'listening':
+      return pickSourceId(catalog.exercises.listening, seed);
+    case 'writing':
+      return pickSourceId(catalog.writingPrompts, seed);
+    case 'speaking':
+      return pickSourceId(catalog.speakingPrompts, seed);
+    default:
+      return undefined;
+  }
 }
 
 export function generateTasksForDay(
@@ -155,7 +184,8 @@ export function generateTasksForDay(
   skills: Record<SkillKey, SkillState>,
   phase: StudyPhaseDef,
   mockTemplatesAvailable: boolean,
-  dailyIndex: number
+  dailyIndex: number,
+  catalog?: Database | null
 ): StudyTask[] {
   const isRest = isRestDay(date, user, dailyIndex);
   if (isRest) {
@@ -175,13 +205,14 @@ export function generateTasksForDay(
 
   const tasks: StudyTask[] = [];
   let remaining = user.dailyStudyMinutes;
+  const taskSeed = (pos: number) => dailyIndex * 100 + pos;
 
   const weights = computeSkillWeights(skills);
   const phaseName = phase.name;
 
   if (phaseName === 'Assessment') {
     for (const spec of ASSESSMENT_TASKS) {
-      tasks.push(makeTask(date, spec, phase.id));
+      tasks.push(makeTask(date, spec, phase.id, contentSourceFor(spec, catalog, taskSeed(tasks.length))));
       remaining -= spec.durationMinutes;
     }
     return clampToRemaining(tasks);
@@ -190,7 +221,7 @@ export function generateTasksForDay(
   if (phaseName === 'Exam Simulation') {
     // Inject a mock exam on some days.
     if (dailyIndex % 3 === 1 && mockTemplatesAvailable) {
-      const mock = makeMockTask(date, phase.id);
+      const mock = makeMockTask(date, phase.id, catalog);
       tasks.push(mock);
       remaining -= mock.durationMinutes;
     }
@@ -199,7 +230,7 @@ export function generateTasksForDay(
   // Base mandatory: SRS + a mistake review a couple of times a week.
   if (dailyIndex % 4 !== 0) {
     const srs = TASK_LIBRARY[0];
-    tasks.push(makeTask(date, srs, phase.id));
+    tasks.push(makeTask(date, srs, phase.id, contentSourceFor(srs, catalog, taskSeed(tasks.length))));
     remaining -= srs.durationMinutes;
   }
   if (dailyIndex % 3 === 0 && phaseName !== 'Foundation') {
@@ -210,7 +241,7 @@ export function generateTasksForDay(
 
   if (phaseName === 'Final Revision') {
     const rev = TASK_LIBRARY[8];
-    tasks.push(makeTask(date, rev, phase.id));
+    tasks.push(makeTask(date, rev, phase.id, contentSourceFor(rev, catalog, taskSeed(tasks.length))));
     remaining -= rev.durationMinutes;
   }
 
@@ -232,18 +263,19 @@ export function generateTasksForDay(
     if (!phase.focus.includes(skill)) continue;
     const spec = pick(skillTasks[skill] || [TASK_LIBRARY[4]], dailyIndex + SKILL_ORDER.indexOf(skill));
     const minutes = Math.min(Math.max(10, Math.round(weights[skill] * user.dailyStudyMinutes * 0.9)), remaining);
-    tasks.push(makeTask(date, { ...spec, durationMinutes: minutes }, phase.id));
+    tasks.push(makeTask(date, { ...spec, durationMinutes: minutes }, phase.id, contentSourceFor(spec, catalog, taskSeed(tasks.length))));
     remaining -= minutes;
   }
 
   if (remaining >= 8) {
-    tasks.push(makeTask(date, TASK_LIBRARY[2], phase.id));
+    const extra = TASK_LIBRARY[2];
+    tasks.push(makeTask(date, extra, phase.id, contentSourceFor(extra, catalog, taskSeed(tasks.length))));
   }
 
   return tasks;
 }
 
-function makeTask(date: string, spec: TaskSpec, phaseId: string): StudyTask {
+function makeTask(date: string, spec: TaskSpec, phaseId: string, sourceId?: string): StudyTask {
   return {
     id: uid('task'),
     date,
@@ -255,11 +287,11 @@ function makeTask(date: string, spec: TaskSpec, phaseId: string): StudyTask {
     status: 'pending',
     type: spec.type,
     phaseId,
-    sourceId: undefined,
+    sourceId,
   };
 }
 
-function makeMockTask(date: string, phaseId: string): StudyTask {
+function makeMockTask(date: string, phaseId: string, catalog?: Database | null): StudyTask {
   return {
     id: uid('task'),
     date,
@@ -271,6 +303,7 @@ function makeMockTask(date: string, phaseId: string): StudyTask {
     status: 'pending',
     type: 'mock_exam',
     phaseId,
+    sourceId: pickSourceId(catalog?.mockExams, date.length * 3 + phaseId.length),
   };
 }
 
@@ -291,7 +324,8 @@ export interface GeneratedPlan {
 export function generatePlan(
   user: UserProfile,
   skills: Record<SkillKey, SkillState>,
-  mockResults: MockExamResult[]
+  mockResults: MockExamResult[],
+  catalog?: Database | null
 ): GeneratedPlan {
   const start = startOfDay(new Date());
   const exam = startOfDay(new Date(user.examDate));
@@ -311,7 +345,7 @@ export function generatePlan(
   const tasks: StudyTask[] = [];
   days.forEach((date, i) => {
     const phase = phaseForDate(phases, date) ?? phases[phases.length - 1];
-    const dayTasks = generateTasksForDay(date, user, skills, phase, hasMock || daysLeft > 10, i);
+    const dayTasks = generateTasksForDay(date, user, skills, phase, hasMock || daysLeft > 10, i, catalog);
     tasks.push(...dayTasks);
   });
 

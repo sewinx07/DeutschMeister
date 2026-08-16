@@ -1,8 +1,8 @@
 import type { MockExamTemplate } from '@/types';
-import { uid } from '../storage';
+import { slugify, uid } from '../storage';
 
 export function buildMockExams(): MockExamTemplate[] {
-  return [
+  const items: MockExamTemplate[] = [
     {
       id: uid('me'),
       name: 'B1 TELC — General Deutsch',
@@ -142,4 +142,5 @@ export function buildMockExams(): MockExamTemplate[] {
       ],
     },
   ];
+  return items.map((template) => ({ ...template, id: `mock-${slugify(template.name)}` }));
 }
