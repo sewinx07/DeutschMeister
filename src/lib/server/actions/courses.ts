@@ -7,6 +7,7 @@ import { prisma } from '@/lib/server/db';
 import { ActionError, toActionError } from '@/lib/server/errors';
 import { requireUser } from '@/lib/server/auth-helpers';
 import { recordAudit } from '@/lib/server/audit';
+import { recordActivity } from '@/lib/server/activity';
 import { assertPermission } from '@/lib/server/tenant';
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -50,6 +51,13 @@ export async function createCourse(
       targetId: course.id,
       meta: { title: course.title },
     });
+    await recordActivity({
+      orgId: data.orgId,
+      actorId: user.id,
+      type: 'course.created',
+      courseId: course.id,
+      summary: `created course “${course.title}”`,
+    });
     revalidatePath('/app/courses');
     return { ok: true, data: { id: course.id } };
   } catch (e) {
@@ -77,6 +85,13 @@ export async function setCoursePublished(
       action: published ? 'course.published' : 'course.unpublished',
       targetType: 'course',
       targetId: courseId,
+    });
+    await recordActivity({
+      orgId: course.orgId,
+      actorId: user.id,
+      type: published ? 'course.published' : 'course.unpublished',
+      courseId,
+      summary: `${published ? 'published' : 'unpublished'} course “${course.title}”`,
     });
     revalidatePath('/app/courses');
     return { ok: true, data: null };
@@ -113,6 +128,13 @@ export async function createTopic(
       targetType: 'course_topic',
       targetId: topic.id,
       meta: { title: topic.title },
+    });
+    await recordActivity({
+      orgId: course.orgId,
+      actorId: user.id,
+      type: 'course.topic.created',
+      courseId: course.id,
+      summary: `added topic “${topic.title}” to “${course.title}”`,
     });
     revalidatePath(`/app/courses/${course.id}`);
     return { ok: true, data: { id: topic.id } };
@@ -167,6 +189,14 @@ export async function createLesson(
       targetId: lesson.id,
       meta: { title: lesson.title },
     });
+    await recordActivity({
+      orgId: course.orgId,
+      actorId: user.id,
+      type: 'course.lesson.created',
+      courseId: course.id,
+      lessonId: lesson.id,
+      summary: `added lesson “${lesson.title}” to “${course.title}”`,
+    });
     revalidatePath(`/app/courses/${course.id}`);
     return { ok: true, data: { id: lesson.id } };
   } catch (e) {
@@ -219,6 +249,13 @@ export async function updateTopic(
       targetId: data.topicId,
       meta: { title: data.title },
     });
+    await recordActivity({
+      orgId: course.orgId,
+      actorId: user.id,
+      type: 'course.topic.updated',
+      courseId: course.id,
+      summary: `renamed a topic to “${data.title}”`,
+    });
     revalidatePath(`/app/courses/${course.id}`);
     return { ok: true, data: null };
   } catch (e) {
@@ -246,6 +283,13 @@ export async function deleteTopic(input: { topicId: string }): Promise<ActionRes
       targetType: 'course_topic',
       targetId: data.topicId,
       meta: { title: topic.title, lessonsRemoved: lessonCount },
+    });
+    await recordActivity({
+      orgId: course.orgId,
+      actorId: user.id,
+      type: 'course.topic.deleted',
+      courseId: course.id,
+      summary: `removed topic “${topic.title}” from “${course.title}”`,
     });
     revalidatePath(`/app/courses/${course.id}`);
     return { ok: true, data: null };
@@ -332,6 +376,14 @@ export async function updateLesson(
       targetId: data.lessonId,
       meta: { title: data.title },
     });
+    await recordActivity({
+      orgId,
+      actorId: user.id,
+      type: 'course.lesson.updated',
+      courseId,
+      lessonId: data.lessonId,
+      summary: `updated lesson “${data.title}”`,
+    });
     revalidatePath(`/app/courses/${courseId}`);
     return { ok: true, data: null };
   } catch (e) {
@@ -356,6 +408,14 @@ export async function deleteLesson(input: { lessonId: string }): Promise<ActionR
       targetType: 'course_lesson',
       targetId: data.lessonId,
       meta: { title: lesson.title },
+    });
+    await recordActivity({
+      orgId,
+      actorId: user.id,
+      type: 'course.lesson.deleted',
+      courseId,
+      lessonId: data.lessonId,
+      summary: `removed lesson “${lesson.title}”`,
     });
     revalidatePath(`/app/courses/${courseId}`);
     return { ok: true, data: null };

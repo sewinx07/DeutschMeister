@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { Bell } from 'lucide-react';
 import { SignOutButton } from '@/components/app/sign-out-button';
 import { requireOrgContext } from '@/lib/server/org-context';
+import { loadUnreadCount } from '@/lib/server/activity';
 import { canViewAnalytics, roleHasPermission } from '@/lib/server/rbac';
 import type { Metadata } from 'next';
 
@@ -13,6 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ctx = await requireOrgContext();
   const canManage = roleHasPermission(ctx.role, 'course.manage');
   const canAnalyze = canViewAnalytics(ctx.role);
+  const unread = await loadUnreadCount(ctx.org.id, ctx.user.id);
 
   return (
     <div className="min-h-svh bg-muted/30">
@@ -44,6 +47,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               >
                 Assignments
               </Link>
+              <Link
+                href="/app/activity"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                Activity
+              </Link>
               {canAnalyze && (
                 <Link
                   href="/app/analytics"
@@ -61,6 +70,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/app/notifications"
+              aria-label="Notifications"
+              className="relative rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Bell className="h-4 w-4" />
+              {unread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </Link>
             {canManage && (
               <span className="hidden rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary sm:inline">
                 {ctx.role.replaceAll('_', ' ').toLowerCase()}

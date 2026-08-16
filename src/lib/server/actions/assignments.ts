@@ -6,6 +6,7 @@ import { prisma } from '@/lib/server/db';
 import { ActionError, toActionError } from '@/lib/server/errors';
 import { requireUser } from '@/lib/server/auth-helpers';
 import { recordAudit } from '@/lib/server/audit';
+import { recordActivity } from '@/lib/server/activity';
 import { canManageClass } from '@/lib/server/rbac';
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -68,6 +69,27 @@ export async function createAssignment(
       targetId: assignment.id,
       meta: { classId: data.classId, lessonId: data.lessonId, dueAt: data.dueAt },
     });
+
+    const enrolledStudents = await prisma.classEnrollment.findMany({
+      where: { classId: data.classId },
+      select: { studentId: true },
+    });
+    const dueLabel = dueAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    await recordActivity({
+      orgId: klass.orgId,
+      actorId: user.id,
+      type: 'assignment.created',
+      classId: data.classId,
+      courseId: klass.courseId,
+      lessonId: data.lessonId,
+      summary: `assigned “${lesson.title}” to ${klass.name}`,
+      notify: {
+        recipientIds: enrolledStudents.map((e) => e.studentId),
+        title: `New assignment in ${klass.name}`,
+        body: `${lesson.title} · due ${dueLabel}`,
+        link: '/app/assignments',
+      },
+    });
     revalidatePath(`/app/classes/${data.classId}`);
     revalidatePath('/app/assignments');
     revalidatePath('/app');
@@ -84,7 +106,10 @@ export async function deleteAssignment(input: { assignmentId: string }): Promise
 
     const assignment = await prisma.classAssignment.findUnique({
       where: { id: data.assignmentId },
-      include: { class: { select: { orgId: true, teacherId: true } } },
+      include: {
+        class: { select: { orgId: true, teacherId: true, name: true, courseId: true } },
+        lesson: { select: { title: true } },
+      },
     });
     if (!assignment) throw new ActionError('NOT_FOUND', 'Assignment not found.');
     await assertClassManager(user.id, assignment.class.orgId, assignment.class.teacherId, user.isPlatformAdmin);
@@ -96,6 +121,15 @@ export async function deleteAssignment(input: { assignmentId: string }): Promise
       action: 'assignment.deleted',
       targetType: 'assignment',
       targetId: data.assignmentId,
+    });
+    await recordActivity({
+      orgId: assignment.class.orgId,
+      actorId: user.id,
+      type: 'assignment.deleted',
+      classId: assignment.classId,
+      courseId: assignment.class.courseId,
+      lessonId: assignment.lessonId,
+      summary: `removed the assignment “${assignment.lesson.title}” from ${assignment.class.name}`,
     });
     revalidatePath(`/app/classes/${assignment.classId}`);
     revalidatePath('/app/assignments');
@@ -113,7 +147,17 @@ export async function setAssignmentDone(input: { assignmentId: string; done: boo
 
     const assignment = await prisma.classAssignment.findUnique({
       where: { id: data.assignmentId },
-      include: { class: { select: { orgId: true, enrollments: { where: { studentId: user.id }, select: { studentId: true } } } } },
+      include: {
+        class: {
+          select: {
+            orgId: true,
+            teacherId: true,
+            name: true,
+            enrollments: { where: { studentId: user.id }, select: { studentId: true } },
+          },
+        },
+        lesson: { select: { title: true } },
+      },
     });
     if (!assignment) throw new ActionError('NOT_FOUND', 'Assignment not found.');
     if (assignment.class.enrollments.length === 0) {
@@ -125,6 +169,24 @@ export async function setAssignmentDone(input: { assignmentId: string; done: boo
         where: { assignmentId_studentId: { assignmentId: data.assignmentId, studentId: user.id } },
         create: { assignmentId: data.assignmentId, studentId: user.id },
         update: {},
+      });
+      const teacherId = assignment.class.teacherId;
+      await recordActivity({
+        orgId: assignment.class.orgId,
+        actorId: user.id,
+        type: 'assignment.completed',
+        classId: assignment.classId,
+        studentId: user.id,
+        summary: `completed “${assignment.lesson.title}” in ${assignment.class.name}`,
+        notify:
+          teacherId && teacherId !== user.id
+            ? {
+                recipientIds: [teacherId],
+                title: `${user.name} completed an assignment`,
+                body: `${assignment.class.name} — “${assignment.lesson.title}”`,
+                link: `/app/classes/${assignment.classId}`,
+              }
+            : null,
       });
     } else {
       await prisma.assignmentSubmission.deleteMany({

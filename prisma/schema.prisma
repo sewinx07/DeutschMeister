@@ -54,6 +54,10 @@ model User {
   assignedAssignments ClassAssignment[]   @relation("AssignmentAuthor")
   assignmentSubmissions AssignmentSubmission[]
   learnerProfiles   LearnerProfile[]
+  activityEventsAsActor  ActivityEvent[]   @relation("ActivityActor")
+  activityEventsAsStudent ActivityEvent[]  @relation("ActivityStudent")
+  notificationsRecipient Notification[]    @relation("NotificationRecipient")
+  notificationsAsActor    Notification[]    @relation("NotificationActor")
 
   @@map("user")
 }
@@ -122,6 +126,8 @@ model Organization {
   courses     Course[]
   classes     Class[]
   learnerProfiles LearnerProfile[]
+  activityEvents ActivityEvent[]
+  notifications  Notification[]
 
   @@map("organization")
 }
@@ -206,6 +212,7 @@ model Course {
   createdBy User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   topics    CourseTopic[]
   classes   Class[]
+  activityEvents ActivityEvent[]
 
   @@index([orgId, subject])
   @@map("course")
@@ -241,6 +248,7 @@ model CourseLesson {
   topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   assignments ClassAssignment[]
+  activityEvents ActivityEvent[]
 
   @@index([topicId, order])
   @@map("course_lesson")
@@ -262,6 +270,7 @@ model Class {
   teacher     User?              @relation("ClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   enrollments ClassEnrollment[]
   assignments ClassAssignment[]
+  activityEvents ActivityEvent[]
 
   @@index([orgId])
   @@map("class")
@@ -314,6 +323,60 @@ model AssignmentSubmission {
 
   @@unique([assignmentId, studentId])
   @@map("assignment_submission")
+}
+
+// ─── Activity feed & notifications (Phase 11) ──────────────────────────────
+// Org-wide timeline of notable events. Personal notifications are derived
+// from events and target specific members; both are best-effort records.
+
+/// One entry in the org-wide activity feed.
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  orgId     String
+  actorId   String?
+  type      String
+  classId   String?
+  courseId  String?
+  lessonId  String?
+  studentId String?
+  summary   String
+  createdAt DateTime @default(now())
+
+  org     Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  actor   User?         @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  class   Class?        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  course  Course?       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson  CourseLesson? @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  student User?         @relation("ActivityStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([orgId, createdAt])
+  @@index([classId])
+  @@map("activity_event")
+}
+
+/// A per-recipient notification derived from an activity event.
+model Notification {
+  id          String         @id @default(cuid())
+  orgId       String
+  recipientId String
+  actorId     String?
+  eventId     String?
+  type        String
+  title       String
+  body        String?
+  link        String?
+  readAt      DateTime?
+  createdAt   DateTime       @default(now())
+
+  org       Organization?  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  recipient User?          @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User?          @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  event     ActivityEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([orgId, createdAt])
+  @@map("notification")
 }
 
 // ─── Study engine (Phase 3) ────────────────────────────────────────────────

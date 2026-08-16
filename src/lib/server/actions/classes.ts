@@ -7,6 +7,7 @@ import { prisma } from '@/lib/server/db';
 import { ActionError, toActionError } from '@/lib/server/errors';
 import { requireUser } from '@/lib/server/auth-helpers';
 import { recordAudit } from '@/lib/server/audit';
+import { recordActivity } from '@/lib/server/activity';
 import { assertPermission, resolveMembership } from '@/lib/server/tenant';
 import { canManageClass } from '@/lib/server/rbac';
 
@@ -65,6 +66,14 @@ export async function createClass(
       targetId: klass.id,
       meta: { name: klass.name, courseId: course.id },
     });
+    await recordActivity({
+      orgId: data.orgId,
+      actorId: user.id,
+      type: 'class.created',
+      classId: klass.id,
+      courseId: klass.courseId,
+      summary: `created class ${klass.name}`,
+    });
     revalidatePath('/app/classes');
     return { ok: true, data: { id: klass.id } };
   } catch (e) {
@@ -83,7 +92,7 @@ export async function enrollStudent(
     if (!klass) throw new ActionError('NOT_FOUND', 'Class not found.');
     await assertClassManager(user.id, klass.orgId, klass.teacherId, user.isPlatformAdmin);
 
-    const student = await resolveActiveMember(klass.orgId, data.studentId);
+    const student = await resolveActiveStudent(klass.orgId, data.studentId);
     if (!student) throw new ActionError('NOT_FOUND', 'Student is not a member of this organization.');
 
     try {
@@ -98,6 +107,24 @@ export async function enrollStudent(
       targetType: 'class',
       targetId: data.classId,
       meta: { studentId: data.studentId },
+    });
+    const studentUser = await prisma.user.findUnique({
+      where: { id: data.studentId },
+      select: { name: true },
+    });
+    await recordActivity({
+      orgId: klass.orgId,
+      actorId: user.id,
+      type: 'student.enrolled',
+      classId: data.classId,
+      studentId: data.studentId,
+      summary: `added ${studentUser?.name ?? 'a student'} to ${klass.name}`,
+      notify: {
+        recipientIds: [data.studentId],
+        title: `You were added to ${klass.name}`,
+        body: klass.description ?? undefined,
+        link: `/app/classes/${data.classId}`,
+      },
     });
     revalidatePath(`/app/classes/${data.classId}`);
     return { ok: true, data: null };
@@ -128,6 +155,18 @@ export async function removeEnrollment(
       targetId: data.classId,
       meta: { studentId: data.studentId },
     });
+    const studentUser = await prisma.user.findUnique({
+      where: { id: data.studentId },
+      select: { name: true },
+    });
+    await recordActivity({
+      orgId: klass.orgId,
+      actorId: user.id,
+      type: 'student.unenrolled',
+      classId: data.classId,
+      studentId: data.studentId,
+      summary: `removed ${studentUser?.name ?? 'a student'} from ${klass.name}`,
+    });
     revalidatePath(`/app/classes/${data.classId}`);
     return { ok: true, data: null };
   } catch (e) {
@@ -146,4 +185,11 @@ async function resolveActiveMember(orgId: string, userId: string) {
     },
   });
   return membership;
+}
+
+/** ACTIVE members with the student role, i.e. who may be enrolled in a class. */
+async function resolveActiveStudent(orgId: string, userId: string) {
+  return prisma.organizationMember.findFirst({
+    where: { orgId, userId, status: MembershipStatus.ACTIVE, role: Role.STUDENT },
+  });
 }
