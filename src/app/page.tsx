@@ -80,10 +80,10 @@ export default function LandingPage() {
           </Link>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/onboarding">Log in</Link>
+              <Link href="/login">Log in</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link href="/onboarding">Get started</Link>
+              <Link href="/signup">Get started</Link>
             </Button>
           </div>
         </div>
@@ -109,14 +109,14 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Button size="lg" className="h-11 px-6 text-base" asChild>
-                  <Link href="/onboarding">Start preparing free</Link>
+                  <Link href="/signup">Get started free</Link>
                 </Button>
                 <Button size="lg" variant="outline" className="h-11 px-6 text-base" asChild>
-                  <Link href="/#features">See how it works</Link>
+                  <Link href="/onboarding">Explore the German exam demo</Link>
                 </Button>
               </div>
               <p className="mt-4 text-sm text-muted-foreground">
-                No sign-up needed · works fully offline · data stays in your browser
+                Try the demo without signing up · or create a free account for teams and schools
               </p>
             </div>
           </div>
@@ -180,8 +180,8 @@ export default function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Button size="lg" className="h-11 px-6 text-base" asChild>
-                <Link href="/onboarding">
-                  <CheckCircle2 className="mr-2 h-5 w-5" /> Start preparing free
+                <Link href="/signup">
+                  <CheckCircle2 className="mr-2 h-5 w-5" /> Get started free
                 </Link>
               </Button>
             </div>

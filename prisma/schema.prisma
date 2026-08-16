@@ -1,0 +1,275 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  PLATFORM_ADMIN
+  ORGANIZATION_OWNER
+  ORGANIZATION_ADMIN
+  TEACHER
+  STUDENT
+  INDIVIDUAL_LEARNER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+/// Unified identity. Membership + role defines a user's access within each
+/// organization; a user may belong to any number of organizations.
+model User {
+  id                     String    @id @default(cuid())
+  name                   String
+  email                  String    @unique
+  emailVerified          Boolean   @default(false)
+  image                  String?
+  isPlatformAdmin        Boolean   @default(false)
+  currentOrganizationId  String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  memberships       OrganizationMember[]
+  invitedBy         Invitation[]           @relation("Inviter")
+  invitee           Invitation[]           @relation("Invitee")
+  auditLogs         AuditLog[]             @relation("Actor")
+  sessions          Session[]
+  accounts          Account[]
+  coursesCreated    Course[]
+  classesTaught     Class[]                @relation("ClassTeacher")
+  enrollments       ClassEnrollment[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@map("verification")
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     OrganizationMember[]
+  invitations Invitation[]
+  auditLogs   AuditLog[]
+  courses     Course[]
+  classes     Class[]
+
+  @@map("organization")
+}
+
+/// A user's role inside a single organization. Tenant isolation is enforced
+/// server-side by resolving membership from the authenticated user id —
+/// never from client-supplied values.
+model OrganizationMember {
+  id        String           @id @default(cuid())
+  orgId     String
+  userId    String
+  role      Role
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("organization_member")
+}
+
+model Invitation {
+  id           String           @id @default(cuid())
+  orgId        String
+  email        String
+  role         Role
+  token        String           @unique
+  status       InvitationStatus @default(PENDING)
+  expiresAt    DateTime
+  invitedById  String
+  inviteeUserId String?
+  acceptedAt   DateTime?
+  createdAt    DateTime         @default(now())
+
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy User          @relation("Inviter", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitee   User?         @relation("Invitee", fields: [inviteeUserId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([email])
+  @@map("invitation")
+}
+
+/// Append-only record of organization-sensitive actions.
+model AuditLog {
+  id         String    @id @default(cuid())
+  orgId      String?
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  meta       Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  org   Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  actor User?         @relation("Actor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@map("audit_log")
+}
+
+/// A subject-agnostic learning course owned by an organization.
+model Course {
+  id          String   @id @default(cuid())
+  orgId       String
+  title       String
+  subject     String
+  description String?
+  level       String?
+  color       String?
+  published   Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org       Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  topics    CourseTopic[]
+  classes   Class[]
+
+  @@index([orgId, subject])
+  @@map("course")
+}
+
+model CourseTopic {
+  id          String   @id @default(cuid())
+  courseId    String
+  order       Int      @default(0)
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  course  Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons CourseLesson[]
+
+  @@index([courseId, order])
+  @@map("course_topic")
+}
+
+/// A single learning unit. `content` is a structured JSON payload consumed by
+/// the lesson renderer (kept generic so any subject can be taught).
+model CourseLesson {
+  id        String   @id @default(cuid())
+  topicId   String
+  order     Int      @default(0)
+  title     String
+  kind      String
+  minutes   Int?
+  content   Json?
+  createdAt DateTime @default(now())
+
+  topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, order])
+  @@map("course_lesson")
+}
+
+/// A teacher-led group of students studying a course within an organization.
+model Class {
+  id          String   @id @default(cuid())
+  orgId       String
+  courseId    String
+  teacherId   String?
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher     User?              @relation("ClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  enrollments ClassEnrollment[]
+
+  @@index([orgId])
+  @@map("class")
+}
+
+model ClassEnrollment {
+  id         String   @id @default(cuid())
+  classId    String
+  studentId  String
+  enrolledAt DateTime @default(now())
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, studentId])
+  @@index([studentId])
+  @@map("class_enrollment")
+}

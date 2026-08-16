@@ -121,9 +121,25 @@ export default function VocabularyPage() {
                     <span className="text-2xl font-semibold text-foreground">
                       {current.article} {current.german}
                     </span>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); speak(`${current.article} ${current.german}`); }}>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Play pronunciation"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        speak(`${current.article} ${current.german}`);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          speak(`${current.article} ${current.german}`);
+                        }
+                      }}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
                       <Volume2 className="h-4 w-4" />
-                    </Button>
+                    </span>
                   </div>
                   {current.plural ? <span className="text-sm text-muted-foreground">{current.plural}</span> : null}
                   {!revealed ? (

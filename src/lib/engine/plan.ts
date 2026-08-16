@@ -112,8 +112,7 @@ export function computePhases(
 }
 
 export function phaseForDate(phases: StudyPhaseDef[], date: string): StudyPhaseDef | undefined {
-  const t = new Date(date).getTime();
-  return phases.find((p) => t >= new Date(p.start).getTime() && t <= new Date(p.end).getTime());
+  return phases.find((p) => date >= dayKey(new Date(p.start)) && date <= dayKey(new Date(p.end)));
 }
 
 interface TaskSpec {
@@ -311,7 +310,7 @@ export function generatePlan(
   const hasMock = mockResults.length > 0;
   const tasks: StudyTask[] = [];
   days.forEach((date, i) => {
-    const phase = phaseForDate(phases, date)!;
+    const phase = phaseForDate(phases, date) ?? phases[phases.length - 1];
     const dayTasks = generateTasksForDay(date, user, skills, phase, hasMock || daysLeft > 10, i);
     tasks.push(...dayTasks);
   });
