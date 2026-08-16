@@ -2,7 +2,7 @@
 
 A personal command center for passing your German exam and landing an IT-Ausbildung in Germany. Adaptive study plans, spaced-repetition vocabulary, grammar drills, mock exams, an AI coach, and a full career toolkit — all in one app.
 
-> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres), Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons) and Phase 5 (teacher progress dashboard — per-student study progress in every class) are implemented and tested; the German exam app remains fully functional as the flagship demo.
+> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres), Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons), Phase 5 (teacher progress dashboard — per-student study progress in every class) and Phase 6 (lesson content authoring — edit, reorder and delete topics & lessons, including each lesson's JSON content) are implemented and tested; the German exam app remains fully functional as the flagship demo.
 
 ## Platform foundation (Phase 1)
 
@@ -44,6 +44,14 @@ A personal command center for passing your German exam and landing an IT-Ausbild
 - **Tenant-scoped** — `loadClassProgress` in `src/lib/server/class-progress.ts` resolves the class strictly by `(orgId, classId)` and lists only enrolled students; the page gates on the same manager/teacher rule the class page uses.
 - **UI** — `ClassProgressPanel` renders a collapsible roster with skill bars, weekly activity, vocabulary/mastery, mock stats and recent mistakes; the class page links to it for managers only.
 - **Coverage** — integration tests in `tests/class-progress.test.ts`: summary aggregation over persisted state, no profile → `null` with zero rows created, and org-scoped class reads.
+
+## Lesson content authoring (Phase 6)
+
+- **Edit, reorder, delete** — course managers can rename a topic, rewrite its description, move topics and lessons up/down, and delete lessons or whole topics (topic deletion cascades to its lessons, with a confirm step and the removed lesson count in the audit log).
+- **Lesson content** — each lesson's `content` JSON is editable in-app through a validated JSON editor with a live read-only preview of common content shapes, so teachers can author lesson material without touching the database.
+- **Actions** — `updateTopic`, `deleteTopic`, `moveTopic`, `updateLesson`, `deleteLesson`, `moveLesson` in `src/lib/server/actions/courses.ts`, all permission-checked with `course.manage`, Zod-validated, audited and revalidated; `createTopic`/`createLesson` now audit as well.
+- **UI** — `TopicEditor` and `LessonEditor` controls on the course page (visible only to managers); `LessonContentEditor` is the shared JSON editor/preview used by lesson editing.
+- **Coverage** — integration tests in `tests/course-authoring.test.ts` run the real actions against the test database (with `requireUser`/audit/`revalidatePath` mocked): topic/lesson updates, order swaps in both directions, JSON content round-trip and clearing, cross-org denial, and topic deletion cascade.
 
 ## Features
 
@@ -92,7 +100,7 @@ Required env vars (see `.env.example`):
 ### Tests
 
 ```bash
-npm test                # RBAC, tenant-isolation, course/class isolation, class-progress, plan & study engine tests
+npm test                # RBAC, tenant-isolation, course/class & authoring, class-progress, plan & study engine tests
 ```
 
 Integration tests run against `TEST_DATABASE_URL` (a dedicated Neon branch) and never touch the development database. Apply migrations to it once with `DATABASE_URL=<test-url> npm run db:deploy`.

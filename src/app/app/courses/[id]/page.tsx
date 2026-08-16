@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChevronLeft } from 'lucide-react';
 import { AddLessonForm } from '@/components/app/add-lesson-form';
 import { AddTopicForm } from '@/components/app/add-topic-form';
+import { LessonEditor } from '@/components/app/lesson-editor';
 import { PublishToggle } from '@/components/app/publish-toggle';
+import { TopicEditor } from '@/components/app/topic-editor';
 import { requireOrgContext } from '@/lib/server/org-context';
 import { roleHasPermission } from '@/lib/server/rbac';
 import { prisma } from '@/lib/server/db';
@@ -83,11 +85,20 @@ export default async function CourseDetailPage({
         {course.topics.map((topic, index) => (
           <Card key={topic.id}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-3 text-base">
-                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                  {index + 1}
+              <CardTitle className="flex items-center justify-between gap-3 text-base">
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                    {index + 1}
+                  </span>
+                  <span className="truncate">{topic.title}</span>
                 </span>
-                {topic.title}
+                {canManage && (
+                  <TopicEditor
+                    topic={{ id: topic.id, title: topic.title, description: topic.description, lessonCount: topic.lessons.length }}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < course.topics.length - 1}
+                  />
+                )}
               </CardTitle>
               {topic.description && <CardDescription>{topic.description}</CardDescription>}
             </CardHeader>
@@ -95,7 +106,7 @@ export default async function CourseDetailPage({
               {topic.lessons.length === 0 && (
                 <p className="text-sm text-muted-foreground">No lessons yet.</p>
               )}
-              {topic.lessons.map((lesson) => (
+              {topic.lessons.map((lesson, lessonIndex) => (
                 <div
                   key={lesson.id}
                   className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
@@ -111,6 +122,13 @@ export default async function CourseDetailPage({
                     {String(index + 1).padStart(2, '0')}
                     {String(lesson.order + 1).padStart(2, '0')}
                   </span>
+                  {canManage && (
+                    <LessonEditor
+                      lesson={{ id: lesson.id, title: lesson.title, kind: lesson.kind, minutes: lesson.minutes, content: lesson.content }}
+                      canMoveUp={lessonIndex > 0}
+                      canMoveDown={lessonIndex < topic.lessons.length - 1}
+                    />
+                  )}
                 </div>
               ))}
               {canManage && <AddLessonForm topicId={topic.id} />}

@@ -106,6 +106,14 @@ export async function createTopic(
     const topic = await prisma.courseTopic.create({
       data: { courseId: data.courseId, title: data.title, description: data.description ?? null, order },
     });
+    await recordAudit({
+      orgId: course.orgId,
+      actorId: user.id,
+      action: 'course.topic.created',
+      targetType: 'course_topic',
+      targetId: topic.id,
+      meta: { title: topic.title },
+    });
     revalidatePath(`/app/courses/${course.id}`);
     return { ok: true, data: { id: topic.id } };
   } catch (e) {
@@ -151,8 +159,242 @@ export async function createLesson(
         order,
       },
     });
+    await recordAudit({
+      orgId: course.orgId,
+      actorId: user.id,
+      action: 'course.lesson.created',
+      targetType: 'course_lesson',
+      targetId: lesson.id,
+      meta: { title: lesson.title },
+    });
     revalidatePath(`/app/courses/${course.id}`);
     return { ok: true, data: { id: lesson.id } };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+async function loadCourseForLesson(
+  user: Awaited<ReturnType<typeof requireUser>>,
+  lessonId: string,
+): Promise<{ courseId: string; orgId: string }> {
+  const lesson = await prisma.courseLesson.findUnique({ where: { id: lessonId } });
+  if (!lesson) throw new ActionError('NOT_FOUND', 'Lesson not found.');
+  const topic = await prisma.courseTopic.findUnique({ where: { id: lesson.topicId } });
+  if (!topic) throw new ActionError('NOT_FOUND', 'Topic not found.');
+  const course = await prisma.course.findUnique({ where: { id: topic.courseId } });
+  if (!course) throw new ActionError('NOT_FOUND', 'Course not found.');
+  await assertPermission(user.id, course.orgId, 'course.manage', { isPlatformAdmin: user.isPlatformAdmin });
+  return { courseId: course.id, orgId: course.orgId };
+}
+
+export async function updateTopic(
+  input: { topicId: string; title: string; description?: string }
+): Promise<ActionResult<null>> {
+  try {
+    const user = await requireUser();
+    const data = z
+      .object({
+        topicId: z.string().min(1),
+        title: z.string().min(2).max(160),
+        description: z.string().max(500).optional(),
+      })
+      .parse(input);
+
+    const topic = await prisma.courseTopic.findUnique({ where: { id: data.topicId } });
+    if (!topic) throw new ActionError('NOT_FOUND', 'Topic not found.');
+    const course = await prisma.course.findUnique({ where: { id: topic.courseId } });
+    if (!course) throw new ActionError('NOT_FOUND', 'Course not found.');
+    await assertPermission(user.id, course.orgId, 'course.manage', { isPlatformAdmin: user.isPlatformAdmin });
+
+    await prisma.courseTopic.update({
+      where: { id: data.topicId },
+      data: { title: data.title, description: data.description ?? null },
+    });
+    await recordAudit({
+      orgId: course.orgId,
+      actorId: user.id,
+      action: 'course.topic.updated',
+      targetType: 'course_topic',
+      targetId: data.topicId,
+      meta: { title: data.title },
+    });
+    revalidatePath(`/app/courses/${course.id}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export async function deleteTopic(input: { topicId: string }): Promise<ActionResult<null>> {
+  try {
+    const user = await requireUser();
+    const data = z.object({ topicId: z.string().min(1) }).parse(input);
+
+    const topic = await prisma.courseTopic.findUnique({ where: { id: data.topicId } });
+    if (!topic) throw new ActionError('NOT_FOUND', 'Topic not found.');
+    const course = await prisma.course.findUnique({ where: { id: topic.courseId } });
+    if (!course) throw new ActionError('NOT_FOUND', 'Course not found.');
+    await assertPermission(user.id, course.orgId, 'course.manage', { isPlatformAdmin: user.isPlatformAdmin });
+
+    const lessonCount = await prisma.courseLesson.count({ where: { topicId: data.topicId } });
+    await prisma.courseTopic.delete({ where: { id: data.topicId } });
+    await recordAudit({
+      orgId: course.orgId,
+      actorId: user.id,
+      action: 'course.topic.deleted',
+      targetType: 'course_topic',
+      targetId: data.topicId,
+      meta: { title: topic.title, lessonsRemoved: lessonCount },
+    });
+    revalidatePath(`/app/courses/${course.id}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export async function moveTopic(
+  input: { topicId: string; direction: 'up' | 'down' }
+): Promise<ActionResult<null>> {
+  try {
+    const user = await requireUser();
+    const data = z.object({ topicId: z.string().min(1), direction: z.enum(['up', 'down']) }).parse(input);
+
+    const topic = await prisma.courseTopic.findUnique({ where: { id: data.topicId } });
+    if (!topic) throw new ActionError('NOT_FOUND', 'Topic not found.');
+    const course = await prisma.course.findUnique({ where: { id: topic.courseId } });
+    if (!course) throw new ActionError('NOT_FOUND', 'Course not found.');
+    await assertPermission(user.id, course.orgId, 'course.manage', { isPlatformAdmin: user.isPlatformAdmin });
+
+    const neighbor = await prisma.courseTopic.findFirst({
+      where: { courseId: topic.courseId, order: data.direction === 'up' ? { lt: topic.order } : { gt: topic.order } },
+      orderBy: { order: data.direction === 'up' ? 'desc' : 'asc' },
+    });
+    if (!neighbor) return { ok: true, data: null };
+
+    await prisma.$transaction([
+      prisma.courseTopic.update({ where: { id: topic.id }, data: { order: neighbor.order } }),
+      prisma.courseTopic.update({ where: { id: neighbor.id }, data: { order: topic.order } }),
+    ]);
+    await recordAudit({
+      orgId: course.orgId,
+      actorId: user.id,
+      action: 'course.topic.moved',
+      targetType: 'course_topic',
+      targetId: topic.id,
+      meta: { direction: data.direction },
+    });
+    revalidatePath(`/app/courses/${course.id}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export async function updateLesson(
+  input: {
+    lessonId: string;
+    title: string;
+    kind: string;
+    minutes?: number;
+    content?: Record<string, unknown> | null;
+  }
+): Promise<ActionResult<null>> {
+  try {
+    const user = await requireUser();
+    const data = z
+      .object({
+        lessonId: z.string().min(1),
+        title: z.string().min(2).max(160),
+        kind: z.string().min(1).max(40),
+        minutes: z.number().int().min(1).max(600).optional(),
+        content: z.record(z.unknown()).nullable().optional(),
+      })
+      .parse(input);
+
+    const { courseId, orgId } = await loadCourseForLesson(user, data.lessonId);
+
+    await prisma.courseLesson.update({
+      where: { id: data.lessonId },
+      data: {
+        title: data.title,
+        kind: data.kind,
+        minutes: data.minutes ?? null,
+        content: data.content === undefined ? undefined : ((data.content ?? Prisma.JsonNull) as Prisma.InputJsonValue),
+      },
+    });
+    await recordAudit({
+      orgId,
+      actorId: user.id,
+      action: 'course.lesson.updated',
+      targetType: 'course_lesson',
+      targetId: data.lessonId,
+      meta: { title: data.title },
+    });
+    revalidatePath(`/app/courses/${courseId}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export async function deleteLesson(input: { lessonId: string }): Promise<ActionResult<null>> {
+  try {
+    const user = await requireUser();
+    const data = z.object({ lessonId: z.string().min(1) }).parse(input);
+
+    const lesson = await prisma.courseLesson.findUnique({ where: { id: data.lessonId } });
+    if (!lesson) throw new ActionError('NOT_FOUND', 'Lesson not found.');
+    const { courseId, orgId } = await loadCourseForLesson(user, data.lessonId);
+
+    await prisma.courseLesson.delete({ where: { id: data.lessonId } });
+    await recordAudit({
+      orgId,
+      actorId: user.id,
+      action: 'course.lesson.deleted',
+      targetType: 'course_lesson',
+      targetId: data.lessonId,
+      meta: { title: lesson.title },
+    });
+    revalidatePath(`/app/courses/${courseId}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export async function moveLesson(
+  input: { lessonId: string; direction: 'up' | 'down' }
+): Promise<ActionResult<null>> {
+  try {
+    const user = await requireUser();
+    const data = z.object({ lessonId: z.string().min(1), direction: z.enum(['up', 'down']) }).parse(input);
+
+    const lesson = await prisma.courseLesson.findUnique({ where: { id: data.lessonId } });
+    if (!lesson) throw new ActionError('NOT_FOUND', 'Lesson not found.');
+    const { courseId, orgId } = await loadCourseForLesson(user, data.lessonId);
+
+    const neighbor = await prisma.courseLesson.findFirst({
+      where: { topicId: lesson.topicId, order: data.direction === 'up' ? { lt: lesson.order } : { gt: lesson.order } },
+      orderBy: { order: data.direction === 'up' ? 'desc' : 'asc' },
+    });
+    if (!neighbor) return { ok: true, data: null };
+
+    await prisma.$transaction([
+      prisma.courseLesson.update({ where: { id: lesson.id }, data: { order: neighbor.order } }),
+      prisma.courseLesson.update({ where: { id: neighbor.id }, data: { order: lesson.order } }),
+    ]);
+    await recordAudit({
+      orgId,
+      actorId: user.id,
+      action: 'course.lesson.moved',
+      targetType: 'course_lesson',
+      targetId: lesson.id,
+      meta: { direction: data.direction },
+    });
+    revalidatePath(`/app/courses/${courseId}`);
+    return { ok: true, data: null };
   } catch (e) {
     return { ok: false, error: toActionError(e) };
   }
