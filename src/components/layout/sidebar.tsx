@@ -11,14 +11,14 @@ export function Logo() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5 px-2">
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-        <span className="text-sm font-bold tracking-tight">DM</span>
+        <span className="text-sm font-bold tracking-tight">L</span>
       </div>
       <div className="flex flex-col leading-none">
         <span className="text-sm font-semibold tracking-tight text-foreground">
-          DeutschMeister
+          Lernio
         </span>
         <span className="text-[10px] text-muted-foreground">
-          Exam + IT Ausbildung
+          Learning platform
         </span>
       </div>
     </Link>

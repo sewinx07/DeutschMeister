@@ -4,66 +4,65 @@ import { Button } from '@/components/ui/button';
 import {
   BarChart3,
   BookOpen,
-  Briefcase,
-  CalendarDays,
+  Bell,
   CheckCircle2,
-  Languages,
-  MessageSquareText,
+  GraduationCap,
+  Shield,
   Sparkles,
-  Target,
+  Users,
 } from 'lucide-react';
 
 const FEATURES = [
   {
-    icon: CalendarDays,
-    title: 'Adaptive study plan',
+    icon: Users,
+    title: 'Multi-tenant organizations',
     description:
-      'A phase-by-phase plan built around your exam date that automatically rebalances toward your weakest skills.',
-  },
-  {
-    icon: Languages,
-    title: 'All six skills',
-    description:
-      'Vocabulary with spaced repetition, grammar drills, listening with German audio, reading, writing and speaking.',
-  },
-  {
-    icon: Target,
-    title: 'Mock exams & readiness',
-    description:
-      'Full mock exams with instant scoring and a live readiness score that tells you if you are on track for exam day.',
+      'Each school or team gets its own isolated workspace with members, roles and permissions — owners, teachers and students.',
   },
   {
     icon: BookOpen,
-    title: 'Mistake bank',
+    title: 'Course & class management',
     description:
-      'Every wrong answer is captured, explained and scheduled for review so you stop repeating the same errors.',
+      'Create courses with topics and lessons, assign them to classes, set due dates and track completion across your entire team.',
   },
   {
-    icon: MessageSquareText,
-    title: 'AI coach',
+    icon: BarChart3,
+    title: 'Progress & analytics',
     description:
-      'Ask about your plan, vocabulary or grammar anytime. Works instantly offline, and gets smarter with an optional API key.',
+      'Per-student study progress, cross-class analytics, at-risk flagging and an activity feed — all in one staff dashboard.',
   },
   {
-    icon: Briefcase,
-    title: 'IT-Ausbildung toolkit',
+    icon: Bell,
+    title: 'Notifications & activity feed',
     description:
-      'Ausbildung roadmap, application tracker, document checklists and a portfolio builder for your Fachinformatiker applications.',
+      'An org-wide event feed with role-aware visibility. Students see their own classes; staff see everything. Bell badge for unread alerts.',
+  },
+  {
+    icon: Shield,
+    title: 'Roles & permissions',
+    description:
+      'Granular RBAC: platform admin, organization owner, admin, teacher, student. Every action is permission-checked and audit-logged.',
+  },
+  {
+    icon: Sparkles,
+    title: 'AI-powered learning',
+    description:
+      'AI coach for questions, writing feedback and speaking analysis. Works offline with a built-in engine; smarter with an API key.',
   },
 ];
 
 const STEPS = [
   {
-    title: 'Tell us your goal',
-    description: 'Pick your current level, target exam and date, and how much time you have per day.',
+    title: 'Create your organization',
+    description: 'Sign up, name your school or team, and you are ready to go in under a minute.',
   },
   {
-    title: 'Study the plan',
-    description: 'Work through daily tasks across all six skills. The plan adapts as you make progress.',
+    title: 'Invite your team',
+    description: 'Teachers, admins and students get invite links. They join with one click and land in the right role.',
   },
   {
-    title: 'Track and apply',
-    description: 'Watch your readiness score climb, then use the career tools to land your Ausbildung.',
+    title: 'Track and grow',
+    description: 'Create courses, assign homework, watch the analytics dashboard light up as your team learns.',
   },
 ];
 
@@ -76,14 +75,14 @@ export default function LandingPage() {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Sparkles className="h-4 w-4" />
             </span>
-            DeutschMeister
+            Lernio
           </Link>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/login">Log in</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link href="/signup">Get started</Link>
+              <Link href="/signup">Create your school</Link>
             </Button>
           </div>
         </div>
@@ -95,28 +94,30 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
             <div className="mx-auto max-w-3xl text-center">
               <Badge variant="outline" className="mb-5 px-3 py-1">
-                German exam prep + IT-Ausbildung, in one place
+                Multi-tenant learning platform for schools &amp; teams
               </Badge>
               <h1 className="text-4xl font-semibold tracking-tight text-balance text-foreground sm:text-6xl">
-                Pass your German exam.
+                The learning platform
                 <br />
-                Land your IT-Ausbildung.
+                your team actually uses.
               </h1>
               <p className="mx-auto mt-5 max-w-xl text-lg text-pretty text-muted-foreground">
-                A personal command center that plans your daily study, drills all six German
-                skills, tracks your exam readiness, and prepares you for applications — for
-                real.
+                Courses, classes, assignments, progress analytics and an AI coach —
+                all in one place. Built for teachers, schools and organizations that
+                take learning seriously.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Button size="lg" className="h-11 px-6 text-base" asChild>
-                  <Link href="/signup">Get started free</Link>
+                  <Link href="/signup">
+                    <GraduationCap className="mr-2 h-5 w-5" /> Create your school
+                  </Link>
                 </Button>
                 <Button size="lg" variant="outline" className="h-11 px-6 text-base" asChild>
-                  <Link href="/onboarding">Explore the German exam demo</Link>
+                  <Link href="/onboarding">Try the demo</Link>
                 </Button>
               </div>
               <p className="mt-4 text-sm text-muted-foreground">
-                Try the demo without signing up · or create a free account for teams and schools
+                Free to start · no credit card required
               </p>
             </div>
           </div>
@@ -126,10 +127,10 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-                Everything you need to prepare
+                Everything your organization needs
               </h2>
               <p className="mt-3 text-muted-foreground">
-                Built for the 24 September 2026 exam cycle and the Fachinformatiker job market.
+                From course creation to student analytics — one platform, not five tools.
               </p>
             </div>
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -173,15 +174,15 @@ export default function LandingPage() {
         <section className="border-t bg-muted/30">
           <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-20">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-              Your exam countdown is already running
+              Ready to get your team learning?
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-              Start with a 2-minute setup and get your personal plan today.
+              Set up your organization in under a minute. Invite teachers and students. Start tracking progress today.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Button size="lg" className="h-11 px-6 text-base" asChild>
                 <Link href="/signup">
-                  <CheckCircle2 className="mr-2 h-5 w-5" /> Get started free
+                  <CheckCircle2 className="mr-2 h-5 w-5" /> Create your school
                 </Link>
               </Button>
             </div>
@@ -192,12 +193,12 @@ export default function LandingPage() {
       <footer className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <BarChart3 className="h-4 w-4" />
-            DeutschMeister — made for German learners and IT applicants.
+            <Sparkles className="h-4 w-4" />
+            Lernio — the learning platform for schools and teams.
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <Link href="/onboarding" className="hover:text-foreground">Start</Link>
-            <Link href="/dashboard" className="hover:text-foreground">Dashboard</Link>
+            <Link href="/account" className="hover:text-foreground">Account</Link>
+            <Link href="/login" className="hover:text-foreground">Log in</Link>
           </div>
         </div>
       </footer>

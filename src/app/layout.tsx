@@ -17,44 +17,43 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'DeutschMeister — German Exam & IT-Ausbildung Coach',
-    template: '%s · DeutschMeister',
+    default: 'Lernio — Learning Platform for Schools & Teams',
+    template: '%s · Lernio',
   },
   description:
-    'Plan, practise and track your way to passing your German exam and landing an IT-Ausbildung in Germany. Adaptive study plan, SRS vocabulary, mock exams, an AI coach and a full application toolkit.',
+    'Multi-tenant learning platform with courses, classes, assignments, progress analytics and an AI coach. Built for teachers, schools and organizations.',
   keywords: [
-    'German exam preparation',
-    'Goethe-Zertifikat',
-    'telc',
-    'DTZ',
-    'B1 German',
-    'Fachinformatiker',
-    'IT-Ausbildung',
-    'learn German',
-    'Deutsch lernen',
-    'German vocabulary',
-    'German grammar',
+    'learning platform',
+    'school management',
+    'LMS',
+    'course management',
+    'student progress',
+    'classroom',
+    'e-learning',
+    'education',
+    'teachers',
+    'students',
   ],
-  authors: [{ name: 'DeutschMeister' }],
-  creator: 'DeutschMeister',
+  authors: [{ name: 'Lernio' }],
+  creator: 'Lernio',
   openGraph: {
     type: 'website',
-    siteName: 'DeutschMeister',
-    title: 'DeutschMeister — German Exam & IT-Ausbildung Coach',
+    siteName: 'Lernio',
+    title: 'Lernio — Learning Platform for Schools & Teams',
     description:
-      'Your personal command center for passing your German exam and landing an IT-Ausbildung in Germany.',
+      'Courses, classes, assignments, progress analytics and an AI coach — all in one place.',
   },
   twitter: {
     card: 'summary',
-    title: 'DeutschMeister — German Exam & IT-Ausbildung Coach',
+    title: 'Lernio — Learning Platform for Schools & Teams',
     description:
-      'Adaptive study plans, SRS vocabulary, mock exams and an AI coach for German exam + IT-Ausbildung success.',
+      'Multi-tenant learning platform with courses, classes, assignments, analytics and an AI coach.',
   },
   robots: {
     index: true,
     follow: true,
   },
-  applicationName: 'DeutschMeister',
+  applicationName: 'Lernio',
 };
 
 export const viewport: Viewport = {
