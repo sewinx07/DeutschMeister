@@ -4,9 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { getCurrentUser } from '@/lib/server/auth-helpers';
 import { listMembers, listMemberships, listInvitations } from '@/lib/server/actions/orgs';
 import { roleHasPermission } from '@/lib/server/rbac';
+import { prisma } from '@/lib/server/db';
 import { CreateOrgForm } from '@/components/account/create-org-form';
 import { OrgSwitcher } from '@/components/account/org-switcher';
 import { MembersPanel } from '@/components/account/members-panel';
+import { OrgSettingsPanel } from '@/components/account/org-settings-panel';
+import { ProfileEditPanel } from '@/components/account/profile-edit-panel';
+import { PasswordChangeForm } from '@/components/account/password-change-form';
 
 export const metadata = {
   title: 'Account',
@@ -30,10 +34,15 @@ export default async function AccountPage() {
   const currentOrg = memberships.ok ? memberships.data.find((m) => m.current) : undefined;
   const canManageMembers =
     !!currentOrg && roleHasPermission(currentOrg.role as Parameters<typeof roleHasPermission>[0], 'member.manage');
+  const canManageOrg =
+    !!currentOrg && roleHasPermission(currentOrg.role as Parameters<typeof roleHasPermission>[0], 'org.manage');
   const canInvite = canManageMembers;
 
   const members = currentOrg ? await listMembers(currentOrg.orgId) : null;
   const invitations = currentOrg ? await listInvitations(currentOrg.orgId) : null;
+  const orgDetails = currentOrg && canManageOrg
+    ? await prisma.organization.findUnique({ where: { id: currentOrg.orgId }, select: { name: true, description: true, slug: true } })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-10">
@@ -50,16 +59,19 @@ export default async function AccountPage() {
           </CardTitle>
           <CardDescription>Signed in as {user.email}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">{user.name}</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">{user.email}</span>
-          {user.currentOrganizationId && (
-            <>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground">Current org: {currentOrg?.orgName ?? '—'}</span>
-            </>
-          )}
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{user.email}</p>
+          <ProfileEditPanel userName={user.name} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Security</CardTitle>
+          <CardDescription>Change your account password.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PasswordChangeForm />
         </CardContent>
       </Card>
 
@@ -131,6 +143,25 @@ export default async function AccountPage() {
               }
               canInvite={canInvite}
               canRemove={canManageMembers}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {currentOrg && canManageOrg && orgDetails && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Organization settings · {orgDetails.name}
+            </CardTitle>
+            <CardDescription>Edit the organization name and description.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <OrgSettingsPanel
+              orgId={currentOrg.orgId}
+              orgName={orgDetails.name}
+              orgDescription={orgDetails.description ?? ''}
+              orgSlug={orgDetails.slug}
             />
           </CardContent>
         </Card>

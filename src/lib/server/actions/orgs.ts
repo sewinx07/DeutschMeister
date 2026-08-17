@@ -370,3 +370,60 @@ export async function listInvitations(
     return { ok: false, error: toActionError(e) };
   }
 }
+
+export async function updateOrganization(
+  input: { orgId: string; name?: string; description?: string }
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requireUser();
+    const { orgId, name, description } = z
+      .object({
+        orgId: z.string().min(1),
+        name: z.string().min(2, 'Name must be at least 2 characters').max(120).optional(),
+        description: z.string().max(500).optional(),
+      })
+      .parse(input);
+
+    await assertPermission(user.id, orgId, 'org.manage', { isPlatformAdmin: user.isPlatformAdmin });
+
+    const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    if (!org) throw new ActionError('NOT_FOUND', 'Organization not found.');
+
+    const data: { name?: string; description?: string | null } = {};
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description || null;
+
+    if (Object.keys(data).length === 0) {
+      return { ok: true, data: { id: org.id } };
+    }
+
+    await prisma.organization.update({ where: { id: orgId }, data });
+    revalidatePath('/account');
+    revalidatePath('/app');
+    return { ok: true, data: { id: org.id } };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export async function updateProfile(
+  input: { name?: string }
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requireUser();
+    const { name } = z
+      .object({ name: z.string().min(2, 'Name must be at least 2 characters').max(120).optional() })
+      .parse(input);
+
+    if (name === undefined) {
+      return { ok: true, data: { id: user.id } };
+    }
+
+    await prisma.user.update({ where: { id: user.id }, data: { name } });
+    revalidatePath('/account');
+    revalidatePath('/app');
+    return { ok: true, data: { id: user.id } };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}

@@ -2,7 +2,7 @@
 
 A personal command center for passing your German exam and landing an IT-Ausbildung in Germany. Adaptive study plans, spaced-repetition vocabulary, grammar drills, mock exams, an AI coach, and a full career toolkit — all in one app.
 
-> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres), Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons), Phase 5 (teacher progress dashboard — per-student study progress in every class), Phase 6 (lesson content authoring — edit, reorder and delete topics & lessons, including each lesson's JSON content), Phase 7 (course lesson viewer — a dedicated page that renders a course lesson's authored content, with prev/next navigation through the course), Phase 8 (student home dashboard — the org landing page showing today's plan tasks, vocabulary due, open mistakes, exam countdown and weekly activity), Phase 9 (cross-class analytics — an org-wide staff analytics page aggregating progress across all classes and flagging at-risk students), Phase 10 (assignments & homework — class managers assign course lessons to a class with due dates, students mark them done, with a role-scoped assignments hub and a dashboard card), Phase 11 (notifications & activity feed — an org-wide event feed with privacy-aware learner visibility and personal, read-state notifications in the app shell with a bell badge) and Phase 12 (invitations & member management — token-based invite links, pending invitation panel with revoke, activity feed events for member lifecycle, and invitee-exists bug fixes) are implemented and tested; the German exam app remains fully functional as the flagship demo.
+> **Lernio platform (in progress).** The app is being rebuilt as **Lernio** — a multi-tenant learning SaaS for individual learners, teachers and schools. Phase 1 (database, authentication, organizations, roles & permissions, tenant isolation, audit log), Phase 2 (courses, classes and the student/teacher UI), Phase 3 (study engine persistence — SRS vocabulary, study plan, progress and mistakes in Postgres), Phase 4 (lesson player — taking plan tasks as guided, progress-writing lessons), Phase 5 (teacher progress dashboard — per-student study progress in every class), Phase 6 (lesson content authoring — edit, reorder and delete topics & lessons, including each lesson's JSON content), Phase 7 (course lesson viewer — a dedicated page that renders a course lesson's authored content, with prev/next navigation through the course), Phase 8 (student home dashboard — the org landing page showing today's plan tasks, vocabulary due, open mistakes, exam countdown and weekly activity), Phase 9 (cross-class analytics — an org-wide staff analytics page aggregating progress across all classes and flagging at-risk students), Phase 10 (assignments & homework — class managers assign course lessons to a class with due dates, students mark them done, with a role-scoped assignments hub and a dashboard card), Phase 11 (notifications & activity feed — an org-wide event feed with privacy-aware learner visibility and personal, read-state notifications in the app shell with a bell badge), Phase 12 (invitations & member management — token-based invite links, pending invitation panel with revoke, activity feed events for member lifecycle, and invitee-exists bug fixes) and Phase 13 (org settings & user profiles — org managers edit org name/description, users edit their display name, password change via Better Auth, and improved Zod error handling) are implemented and tested; the German exam app remains fully functional as the flagship demo.
 
 ## Platform foundation (Phase 1)
 
@@ -103,6 +103,14 @@ A personal command center for passing your German exam and landing an IT-Ausbild
 - **Bug fixes** — `inviteMember` previously checked if the *inviter* was already a member instead of the *invitee*, preventing any owner from inviting anyone. Fixed to query by invitee email. `resolveActiveMember` in the classes action (Phase 10) was also tightened to `resolveActiveStudent` for enrollment.
 - **Coverage** — integration tests in `tests/invitations.test.ts` (10 tests): invite create with audit + activity, duplicate/existing-member rejection, accept membership + current org switch + activity, invalid/expired/used token rejection, email-mismatch rejection, revoke with audit, remove with activity + last-owner guard, and org-scoped listing.
 
+## Org settings & user profiles (Phase 13)
+
+- **Organization settings** — org owners and admins (`org.manage` permission) can edit the organization name and description from the Account page. Slug is displayed read-only. Changes revalidate the app shell and account page.
+- **User profile editing** — any user can update their display name from the Account page's Profile card, with inline form and optimistic toast feedback.
+- **Password change** — a Security card on the Account page lets users change their password via Better Auth's `changePassword` client method, with current-password verification and minimum-length enforcement.
+- **Zod error surfacing** — `toActionError` in `src/lib/server/errors.ts` now detects `ZodError` and returns `VALIDATION` code instead of `INTERNAL`, giving callers proper error classification.
+- **Coverage** — integration tests in `tests/settings.test.ts` (8 tests): owner can update name/description, description clear to null, teacher cannot update, name too short validation, foreign org rejection, user can update own display name, profile name validation, and undefined-name no-op.
+
 ## Features
 
 - **Onboarding wizard** — set your current and target CEFR level, exam type and date, daily study time, and IT-Ausbildung goal.
@@ -150,7 +158,7 @@ Required env vars (see `.env.example`):
 ### Tests
 
 ```bash
-npm test                # RBAC, tenant-isolation, course/class & authoring, lesson-viewer, class-progress, analytics, home dashboard, plan & study engine tests
+npm test                # RBAC, tenant-isolation, course/class & authoring, lesson-viewer, class-progress, analytics, home dashboard, plan & study engine, activity feed, invitations, and settings tests
 ```
 
 Integration tests run against `TEST_DATABASE_URL` (a dedicated Neon branch) and never touch the development database. Apply migrations to it once with `DATABASE_URL=<test-url> npm run db:deploy`.
@@ -163,7 +171,7 @@ Set either `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in your environment. Withou
 
 The **demo app** stores its data in the browser's `localStorage` under the key `germain:db:v1` — your data never leaves your device, but it is tied to one browser.
 
-Accounts, organizations and memberships live in the **Lernio database** (Postgres). So far it stores authentication, org membership, roles, invitations, the audit log, courses/classes/enrollments, and — since Phase 3 — each learner's study state (vocabulary, plan, progress, mistakes, mock results, achievements, settings).
+Accounts, organizations and memberships live in the **Lernio database** (Postgres). So far it stores authentication, org membership, roles, invitations, the audit log, courses/classes/enrollments, learner study state (vocabulary, plan, progress, mistakes, mock results, achievements, settings), and org/user profile settings (name, description).
 
 ## Deploy
 
