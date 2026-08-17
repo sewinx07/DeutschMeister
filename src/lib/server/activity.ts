@@ -16,7 +16,10 @@ export type ActivityEventType =
   | 'course.topic.deleted'
   | 'course.lesson.created'
   | 'course.lesson.updated'
-  | 'course.lesson.deleted';
+  | 'course.lesson.deleted'
+  | 'member.invited'
+  | 'member.joined'
+  | 'member.removed';
 
 export type RecordActivityInput = {
   orgId: string;

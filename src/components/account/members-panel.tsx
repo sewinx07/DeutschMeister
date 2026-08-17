@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { inviteMember, removeMember } from '@/lib/server/actions/orgs';
+import { inviteMember, removeMember, revokeInvitation } from '@/lib/server/actions/orgs';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS = [
@@ -23,16 +23,29 @@ const ROLE_OPTIONS = [
   { value: 'ORGANIZATION_OWNER', label: 'Owner' },
 ];
 
+type InvitationData = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  token: string;
+  expiresAt: string;
+  invitedBy: string;
+  createdAt: string;
+};
+
 export function MembersPanel({
   orgId,
   currentUserId,
   members,
+  invitations,
   canInvite,
   canRemove,
 }: {
   orgId: string;
   currentUserId: string;
   members: { id: string; name: string; email: string; role: string; roleKey: string }[];
+  invitations: InvitationData[];
   canInvite: boolean;
   canRemove: boolean;
 }) {
@@ -40,6 +53,9 @@ export function MembersPanel({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('STUDENT');
   const [pending, startTransition] = useTransition();
+
+  const pendingInvites = invitations.filter((inv) => inv.status === 'PENDING');
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
 
   function onInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -51,6 +67,7 @@ export function MembersPanel({
           duration: 8000,
         });
         setEmail('');
+        router.refresh();
       } else {
         toast.error(res.error.message);
       }
@@ -67,6 +84,26 @@ export function MembersPanel({
         toast.error(res.error.message);
       }
     });
+  }
+
+  function onRevoke(inviteId: string, inviteEmail: string) {
+    startTransition(async () => {
+      const res = await revokeInvitation(inviteId);
+      if (res.ok) {
+        toast.success(`Invitation to ${inviteEmail} revoked.`);
+        router.refresh();
+      } else {
+        toast.error(res.error.message);
+      }
+    });
+  }
+
+  function onCopyLink(token: string) {
+    const url = `${baseUrl}/invite/${token}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success('Invite link copied.'),
+      () => toast.error('Failed to copy link.'),
+    );
   }
 
   return (
@@ -93,6 +130,34 @@ export function MembersPanel({
           </li>
         ))}
       </ul>
+
+      {pendingInvites.length > 0 && (
+        <div className="border-t pt-4">
+          <p className="mb-2 text-sm font-medium text-muted-foreground">Pending invitations</p>
+          <ul className="divide-y">
+            {pendingInvites.map((inv) => (
+              <li key={inv.id} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{inv.email}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    Invited as {inv.role} by {inv.invitedBy}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button variant="ghost" size="sm" disabled={pending} onClick={() => onCopyLink(inv.token)}>
+                    Copy link
+                  </Button>
+                  {canRemove && (
+                    <Button variant="ghost" size="sm" className="text-destructive" disabled={pending} onClick={() => onRevoke(inv.id, inv.email)}>
+                      Revoke
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {canInvite && (
         <form onSubmit={onInvite} className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-end">

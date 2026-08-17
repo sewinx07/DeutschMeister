@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentUser } from '@/lib/server/auth-helpers';
-import { listMembers, listMemberships } from '@/lib/server/actions/orgs';
+import { listMembers, listMemberships, listInvitations } from '@/lib/server/actions/orgs';
 import { roleHasPermission } from '@/lib/server/rbac';
 import { CreateOrgForm } from '@/components/account/create-org-form';
 import { OrgSwitcher } from '@/components/account/org-switcher';
@@ -33,6 +33,7 @@ export default async function AccountPage() {
   const canInvite = canManageMembers;
 
   const members = currentOrg ? await listMembers(currentOrg.orgId) : null;
+  const invitations = currentOrg ? await listInvitations(currentOrg.orgId) : null;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-10">
@@ -111,6 +112,20 @@ export default async function AccountPage() {
                       email: m.email,
                       role: ROLE_LABEL[m.role] ?? m.role,
                       roleKey: m.role,
+                    }))
+                  : []
+              }
+              invitations={
+                invitations?.ok
+                  ? invitations.data.map((inv) => ({
+                      id: inv.id,
+                      email: inv.email,
+                      role: ROLE_LABEL[inv.role] ?? inv.role,
+                      status: inv.status,
+                      token: inv.token,
+                      expiresAt: inv.expiresAt.toISOString(),
+                      invitedBy: inv.invitedBy,
+                      createdAt: inv.createdAt.toISOString(),
                     }))
                   : []
               }

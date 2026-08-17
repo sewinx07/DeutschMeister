@@ -8,6 +8,7 @@ import { prisma } from '@/lib/server/db';
 import { ActionError, toActionError } from '@/lib/server/errors';
 import { requireUser } from '@/lib/server/auth-helpers';
 import { recordAudit } from '@/lib/server/audit';
+import { recordActivity } from '@/lib/server/activity';
 import { assertPermission, resolveMembership } from '@/lib/server/tenant';
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -103,10 +104,10 @@ export async function inviteMember(
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
     if (!org) throw new ActionError('NOT_FOUND', 'Organization not found.');
 
-    const existing = await prisma.organizationMember.findUnique({
-      where: { orgId_userId: { orgId, userId: user.id } },
+    const existingMember = await prisma.organizationMember.findFirst({
+      where: { orgId, user: { email } },
     });
-    if (existing) throw new ActionError('CONFLICT', 'That user is already a member.');
+    if (existingMember) throw new ActionError('CONFLICT', 'That user is already a member.');
     const existingInvite = await prisma.invitation.findFirst({
       where: { orgId, email, status: 'PENDING' },
     });
@@ -125,6 +126,12 @@ export async function inviteMember(
       targetType: 'invitation',
       targetId: invite.id,
       meta: { email, role },
+    });
+    await recordActivity({
+      orgId,
+      actorId: user.id,
+      type: 'member.invited',
+      summary: `invited ${email} as ${role}`,
     });
     return {
       ok: true,
@@ -203,6 +210,13 @@ export async function acceptInvitation(token: string): Promise<ActionResult<{ or
       targetType: 'organization',
       targetId: invite.orgId,
     });
+    await recordActivity({
+      orgId: invite.orgId,
+      actorId: user.id,
+      type: 'member.joined',
+      studentId: user.id,
+      summary: `joined the organization`,
+    });
     return { ok: true, data: { orgId: org.id, orgName: org.name } };
   } catch (e) {
     return { ok: false, error: toActionError(e) };
@@ -275,6 +289,7 @@ export async function removeMember(
 
     const target = await prisma.organizationMember.findUnique({
       where: { orgId_userId: { orgId, userId } },
+      include: { user: { select: { name: true } } },
     });
     if (!target) throw new ActionError('NOT_FOUND', 'Member not found.');
     if (target.role === Role.ORGANIZATION_OWNER) {
@@ -301,7 +316,56 @@ export async function removeMember(
       targetType: 'user',
       targetId: userId,
     });
+    await recordActivity({
+      orgId,
+      actorId: user.id,
+      type: 'member.removed',
+      studentId: userId,
+      summary: `removed ${target.user.name} from the organization`,
+    });
     return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: toActionError(e) };
+  }
+}
+
+export type InvitationItem = {
+  id: string;
+  email: string;
+  role: Role;
+  status: string;
+  token: string;
+  expiresAt: Date;
+  acceptedAt: Date | null;
+  invitedBy: string;
+  createdAt: Date;
+};
+
+export async function listInvitations(
+  orgId: string
+): Promise<ActionResult<InvitationItem[]>> {
+  try {
+    const user = await requireUser();
+    await assertPermission(user.id, orgId, 'member.view', { isPlatformAdmin: user.isPlatformAdmin });
+    const invitations = await prisma.invitation.findMany({
+      where: { orgId },
+      include: { invitedBy: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      ok: true,
+      data: invitations.map((inv) => ({
+        id: inv.id,
+        email: inv.email,
+        role: inv.role,
+        status: inv.status,
+        token: inv.token,
+        expiresAt: inv.expiresAt,
+        acceptedAt: inv.acceptedAt,
+        invitedBy: inv.invitedBy.name,
+        createdAt: inv.createdAt,
+      })),
+    };
   } catch (e) {
     return { ok: false, error: toActionError(e) };
   }
